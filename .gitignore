@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Downloaded media (yt-dlp / IG / TikTok / user uploads)
+v1/downloads/
+v1/uploads/
+
+# yt-dlp / Whisper caches and temp logs
+*.ytdlp.log
+*.part
+
+# Local secrets if they ever appear (we currently take Gemini key via UI only)
+.env
+.env.*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
