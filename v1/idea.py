@@ -37,6 +37,7 @@ Return a strict JSON object with these keys:
 - hook: string — one sentence in English describing the single most attention-grabbing moment, referencing what's visible
 - tiktok: array of EXACTLY 3 English captions for TikTok (each ≤100 chars, hook-driven, 1-2 emoji each, written like a real creator not a corporate intern)
 - shorts: array of EXACTLY 3 English titles for YouTube Shorts (each ≤80 chars, click-driven, no clickbait lies, no emoji)
+- long_caption: string — a longer English caption suitable for an Instagram/YouTube description field. 120-220 words, 2-4 short paragraphs separated by `\\n\\n`. Open with a hook, give context, end with a CTA inviting comment/follow/save. 1-3 emoji total, sprinkled (not stacked). NO hashtags inside this field — those go to `tags`.
 - tags: array of EXACTLY 15 English hashtag words (no # prefix, no spaces, ranked most-relevant first)
 
 Output ONLY the JSON, no preamble, no code fence."""
@@ -44,24 +45,45 @@ Output ONLY the JSON, no preamble, no code fence."""
 _RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "hype_score": {"type": "number"},
-        "hook":       {"type": "string"},
-        "tiktok":     {"type": "array", "items": {"type": "string"}},
-        "shorts":     {"type": "array", "items": {"type": "string"}},
-        "tags":       {"type": "array", "items": {"type": "string"}},
+        "hype_score":   {"type": "number"},
+        "hook":         {"type": "string"},
+        "tiktok":       {"type": "array", "items": {"type": "string"}},
+        "shorts":       {"type": "array", "items": {"type": "string"}},
+        "long_caption": {"type": "string"},
+        "tags":         {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["hype_score", "hook", "tiktok", "shorts", "tags"],
+    "required": ["hype_score", "hook", "tiktok", "shorts",
+                 "long_caption", "tags"],
 }
 
 
+def _cache_path(file_path: Path) -> Path:
+    """Idea results are cached as `<stem>.idea.json` next to the media
+    so a second click on the same video returns instantly without
+    re-paying the Gemini cost. The user can force-regenerate via the
+    `force` flag when they want a different take."""
+    return file_path.with_suffix(".idea.json")
+
+
 class IdeaJob:
-    def __init__(self, file_path: Path, api_key: str):
+    def __init__(self, file_path: Path, api_key: str,
+                 force: bool = False, hint: str = ""):
         if not file_path.exists():
             raise ValueError(f"file missing: {file_path}")
-        if not api_key or not api_key.strip():
+        # If a hint was supplied, the user is refining — that always means
+        # a fresh Gemini call (cache hit doesn't make sense). Treat as force.
+        if hint and hint.strip():
+            force = True
+        # Allow empty api_key when a cache hit is possible — we won't
+        # call Gemini in that case.
+        if not force and _cache_path(file_path).exists():
+            api_key = (api_key or "").strip()
+        elif not api_key or not api_key.strip():
             raise ValueError("api_key empty")
         self.file = file_path
-        self._api_key = api_key.strip()
+        self._api_key = (api_key or "").strip()
+        self._force = force
+        self._hint = (hint or "").strip()
         self.id = f"idea_{int(time.time() * 1000)}_{id(self) & 0xffff:04x}"
 
         self.created_at = int(time.time())
@@ -70,7 +92,8 @@ class IdeaJob:
         self.status = "queued"   # queued | extracting | transcribing | generating | done | failed
         self.phase_msg = ""
         self.error: Optional[str] = None
-        self.result: Optional[dict] = None  # the parsed Gemini JSON
+        self.result: Optional[dict] = None   # the parsed Gemini JSON
+        self.from_cache: bool = False        # set when result loaded from sidecar
 
         self._thread: Optional[threading.Thread] = None
         self._proc: Optional[subprocess.Popen] = None
@@ -92,6 +115,7 @@ class IdeaJob:
             "started_at":  self.started_at,
             "finished_at": self.finished_at,
             "result":      self.result,
+            "from_cache":  self.from_cache,
             "error":       self.error,
         }
 
@@ -99,6 +123,19 @@ class IdeaJob:
     def _run(self):
         try:
             self.started_at = int(time.time())
+            cache = _cache_path(self.file)
+            # 0. Cache hit — return instantly. `_force` skips this so
+            # the user can ask for a fresh take.
+            if cache.exists() and not self._force:
+                try:
+                    self.result = json.loads(cache.read_text(encoding="utf-8"))
+                    self.from_cache = True
+                    self.status = "done"
+                    self.phase_msg = "из кэша"
+                    return
+                except Exception:
+                    # Bad/corrupt cache — fall through and regenerate.
+                    pass
             # 1. Pull 6 keyframes evenly across the clip duration.
             self.status = "extracting"
             self.phase_msg = "извлекаю 6 кадров"
@@ -114,6 +151,19 @@ class IdeaJob:
             self.phase_msg = "Gemini думает"
             result = self._call_gemini(transcript, frames)
             self.result = result
+            # Persist for next time — sidecar lives next to the media,
+            # so deleting the media via the UI also drops the cache.
+            try:
+                cache.write_text(
+                    json.dumps(result, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+                # Hide the cache from File Explorer — it's a working
+                # file, the user shouldn't have to look at it.
+                core.hide_file(cache)
+            except Exception:
+                # Cache failure isn't fatal — user still gets the
+                # result for this session.
+                pass
             self.status = "done"
             self.phase_msg = ""
         except Exception as e:
@@ -205,7 +255,27 @@ class IdeaJob:
     def _call_gemini(self, transcript: str, frames: list) -> dict:
         # Build the multipart request: one text block, then N inline
         # images. Gemini's `inline_data` wants base64 strings.
-        parts = [{"text": _PROMPT
+        prompt_text = _PROMPT
+        # If the user is refining a previous result, splice the prior
+        # output + their hint into the prompt so Gemini knows what to
+        # change rather than starting from scratch.
+        if self._hint:
+            prev = ""
+            cache = _cache_path(self.file)
+            if cache.exists():
+                try: prev = cache.read_text(encoding="utf-8")
+                except Exception: pass
+            refine_block = (
+                "\n\n=== USER REFINEMENT ===\n"
+                "The user already saw a previous output and wants you to "
+                "redo it with this guidance:\n"
+                f"  {self._hint}\n"
+                "Respect the new direction. Keep the same JSON schema and "
+                "all required keys.\n")
+            if prev:
+                refine_block += "\nPrevious output (for context — do not just copy):\n" + prev
+            prompt_text += refine_block
+        parts = [{"text": prompt_text
                   + "\n\n=== TRANSCRIPT ===\n"
                   + (transcript or "(silent — no speech detected)")}]
         for img in frames:
@@ -253,10 +323,14 @@ class IdeaJob:
 
 
 # ---------- module-level helpers ----------
-def start_idea(file_path: Path, api_key: str) -> IdeaJob:
-    job = IdeaJob(file_path, api_key)
+def start_idea(file_path: Path, api_key: str,
+               force: bool = False, hint: str = "") -> IdeaJob:
+    job = IdeaJob(file_path, api_key, force=force, hint=hint)
     job.start()
     return job
+
+def has_cached(file_path: Path) -> bool:
+    return _cache_path(file_path).exists()
 
 def get_job(job_id: str) -> Optional[IdeaJob]:
     with _LOCK:

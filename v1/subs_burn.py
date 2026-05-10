@@ -107,6 +107,7 @@ def clean_yt_rolling_vtt(vtt_path: Path) -> None:
         out.append(new_text)
         out.append("")
     vtt_path.write_text("\n".join(out), encoding="utf-8")
+    core.hide_file(vtt_path)
 
 # ---------- File / dimension helpers ----------
 def find_subtitle_files(video_path: Path, *,
@@ -195,6 +196,8 @@ def generate_subs_via_whisper(
             text = (seg.text or "").strip()
             if not text: continue
             f.write(f"{vtt_ts(seg.start)} --> {vtt_ts(seg.end)}\n{text}\n\n")
+    # Hide from File Explorer — sidecar is a working file, not user content.
+    core.hide_file(vtt_path)
     if on_phase: on_phase("")
     return vtt_path
 

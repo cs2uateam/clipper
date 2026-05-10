@@ -366,6 +366,7 @@ def list_jobs() -> list:
                 "file_name":   f.name,
                 "file_size_b": stat.st_size,
                 "finished_at": int(stat.st_mtime),
+                "has_idea":    f.with_suffix(".idea.json").exists(),
             })
     out.sort(key=lambda j: -(j.get("finished_at") or j.get("created_at") or 0))
     return out

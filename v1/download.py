@@ -5,8 +5,10 @@ Each download is a DownloadJob owning a subprocess + a parsing thread.
 Progress is parsed from yt-dlp's stdout (`[download] 12.3% of 4.5GiB at
 1.2MiB/s ETA 00:42`) and exposed via status() for the UI to poll.
 
-Files end up in `youtube-analyzer/v1/downloads/<vid>/`. Audio-only
-downloads land alongside video ones — no special folder."""
+Files land FLAT in `clipper/v1/downloads/youtube/<vid>.<ext>` (matches
+insta/tiktok layout). Sidecars (`.vtt`, `.ytdlp.log`, `.info.json`)
+sit next to the mp4 with the same `<vid>.` stem prefix and are hidden
+from the UI list."""
 import re, subprocess, threading, time, urllib.parse
 from pathlib import Path
 from typing import Dict, Optional
@@ -88,6 +90,7 @@ class DownloadJob:
             "subs_position":"bottom",    # bottom / top / center
             "start_t":      None,
             "end_t":        None,
+            "aspect":       "source",    # source / 9:16 / 16:9 / 1:1 / 4:5 / W:H
             **(cfg or {}),
         }
         try:
@@ -95,8 +98,6 @@ class DownloadJob:
         except ValueError:
             self.vid = "unknown"
         self.id = f"dl_{self.vid}_{int(time.time() * 1000)}"
-        self.out_dir = DOWNLOADS_ROOT / self.vid
-        self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self.created_at = int(time.time())
         self.started_at: Optional[int] = None
@@ -136,14 +137,9 @@ class DownloadJob:
             self.status = "cancelled"
 
     def status_dict(self) -> dict:
-        # URL-encode filename component — yt-dlp output keeps the original
-        # video title, which on YouTube Shorts often contains hashtags
-        # (`#memes #cs2 #fyp`). Browsers cut URLs at the first `#` (fragment
-        # delimiter) so a raw href would 404 and the user would see the
-        # FastAPI JSON error instead of the file.
         file_url = None
         if self.file:
-            file_url = f"/downloads/{self.vid}/{urllib.parse.quote(self.file.name)}"
+            file_url = f"/downloads/{urllib.parse.quote(self.file.name)}"
         return {
             "id":           self.id,
             "vid":          self.vid,
@@ -170,6 +166,15 @@ class DownloadJob:
         try:
             self.started_at = int(time.time())
             self.status = "downloading"
+            # Surface what cfg the job actually received — when the user
+            # reports "не сжалось / не наложилось" we want to see at a
+            # glance whether the request even arrived with the right
+            # aspect/watermark/etc. or the browser sent stale defaults.
+            print(f"[dl] cfg: aspect={self.cfg.get('aspect')!r} "
+                  f"quality={self.cfg.get('quality')!r} "
+                  f"audio_only={self.cfg.get('audio_only')} "
+                  f"start={self.cfg.get('start_t')} end={self.cfg.get('end_t')}",
+                  flush=True)
             cmd = self._build_cmd()
             # Write yt-dlp output to a log file rather than a pipe. On
             # Windows, when yt-dlp invokes a child ffmpeg for
@@ -180,7 +185,9 @@ class DownloadJob:
             # configurations), ffmpeg blocks on write, and the entire
             # download deadlocks at 0%. A real file has no such limit
             # — we tail it for progress lines instead.
-            log_path = self.out_dir / ".ytdlp.log"
+            # Per-job log lives at `<vid>.ytdlp.log` so concurrent
+            # downloads don't stomp each other in the flat root.
+            log_path = DOWNLOADS_ROOT / f"{self.vid}.ytdlp.log"
             try: log_path.unlink()
             except Exception: pass
             log_handle = open(log_path, "ab", buffering=0)
@@ -214,8 +221,11 @@ class DownloadJob:
                 if self.file and self.file.exists():
                     self.file_size = self.file.stat().st_size
                 else:
+                    # Find a media file matching this vid in the flat root.
                     candidates = sorted(
-                        [p for p in self.out_dir.iterdir() if p.suffix != ".vtt"],
+                        [p for p in DOWNLOADS_ROOT.iterdir()
+                         if p.is_file() and p.stem == self.vid
+                         and p.suffix.lower() in (".mp4",".m4a",".mp3",".webm",".mkv",".mov")],
                         key=lambda p: -p.stat().st_mtime)
                     if candidates:
                         self.file = candidates[0]
@@ -225,6 +235,18 @@ class DownloadJob:
                 # post-mortem diagnostics.
                 try: log_path.unlink()
                 except Exception: pass
+                # Aspect-ratio post-process: re-encode with crop+scale to
+                # the user-chosen format. Skip when "source" (default) so
+                # we don't pointlessly re-encode 16:9 → 16:9.
+                aspect = (self.cfg.get("aspect") or "source").strip()
+                if aspect and aspect != "source" and self.file and not self.cfg.get("audio_only"):
+                    try:
+                        self.status = "reformatting"
+                        self.phase_msg = f"конвертирую в {aspect}"
+                        self._apply_aspect(aspect)
+                        self.file_size = self.file.stat().st_size
+                    except Exception as e:
+                        self.error = f"aspect convert failed: {e}"
                 # If user wanted subtitles but YouTube didn't provide any
                 # (no manual subs, no auto-captions — common on Shorts and
                 # older / unverified channels), fall back to Whisper to
@@ -268,8 +290,38 @@ class DownloadJob:
             self.error = f"download crashed: {e}"
             self.finished_at = int(time.time())
 
+    def _apply_aspect(self, aspect: str) -> None:
+        """Re-encode the downloaded file in-place to a target aspect.
+        Crop centered + scale to canvas size. Replaces the original.
+        Audio passes through (-c:a copy) — only video is re-encoded."""
+        if not (self.file and self.file.exists()): return
+        vf = core.aspect_vf(aspect)
+        tmp = self.file.with_name(self.file.stem + ".aspect.mp4")
+        cmd = [core.FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+               "-i", str(self.file),
+               "-vf", vf,
+               "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+               "-pix_fmt", "yuv420p",
+               "-c:a", "copy",
+               "-movflags", "+faststart",
+               str(tmp)]
+        p = subprocess.Popen(cmd)
+        self._proc = p
+        p.wait()
+        self._proc = None
+        if p.returncode != 0 or not tmp.exists():
+            try: tmp.unlink()
+            except Exception: pass
+            raise RuntimeError(f"ffmpeg aspect-convert exit {p.returncode}")
+        try: self.file.unlink()
+        except Exception: pass
+        tmp.rename(self.file)
+
     def _build_cmd(self):
-        out_tpl = str(self.out_dir / "%(title).200B [%(id)s].%(ext)s")
+        # Output template uses `%(id)s.%(ext)s` so each video is
+        # `<vid>.mp4` directly in the flat root. Drops the title from
+        # the filename — title still surfaces in `self.title` and the UI.
+        out_tpl = str(DOWNLOADS_ROOT / "%(id)s.%(ext)s")
         cmd = [core.YTDLP, "--newline", "--no-warnings",
                "--ffmpeg-location", core.FFMPEG,
                "-o", out_tpl,
@@ -422,102 +474,80 @@ def stop_job(job_id: str) -> Optional[DownloadJob]:
 # file when the user removes the parent.
 _SIDECAR_EXTS = (".vtt", ".srt", ".srv1", ".srv2", ".srv3", ".ttml", ".json3",
                  ".info.json", ".description", ".live_chat.json", ".log")
+_MEDIA_EXTS = (".mp4", ".m4a", ".mp3", ".webm", ".mkv", ".mov")
 
 def _is_sidecar(p: Path) -> bool:
     name = p.name.lower()
-    if name == ".ytdlp.log": return True
+    if name.endswith(".ytdlp.log"): return True
     return any(name.endswith(ext) for ext in _SIDECAR_EXTS)
 
 def list_jobs() -> list:
     with _LOCK:
         live = [j.status_dict() for j in JOBS.values()]
-    # Also surface previously-completed downloads on disk that aren't in
-    # in-memory JOBS (server restart) so the UI history works. Skip
-    # sidecar files (.vtt etc.) — they're attachments to the main mp4,
-    # not independent downloads.
-    seen_files = {(j["vid"], j.get("file_name")) for j in live if j.get("file_name")}
+    seen = {j.get("file_name") for j in live if j.get("file_name")}
     out = list(live)
     if DOWNLOADS_ROOT.exists():
-        for vid_dir in DOWNLOADS_ROOT.iterdir():
-            if not vid_dir.is_dir(): continue
-            for f in vid_dir.iterdir():
-                if not f.is_file(): continue
-                if _is_sidecar(f): continue
-                if (vid_dir.name, f.name) in seen_files: continue
-                try: stat = f.stat()
-                except Exception: continue
-                out.append({
-                    "id":          f"disk:{vid_dir.name}/{f.name}",
-                    "vid":         vid_dir.name,
-                    "url":         f"https://www.youtube.com/watch?v={vid_dir.name}",
-                    "title":       f.stem,
-                    "status":      "done",
-                    "progress_pct":100.0,
-                    "file_url":    f"/downloads/{vid_dir.name}/{urllib.parse.quote(f.name)}",
-                    "file_name":   f.name,
-                    "file_size_b": stat.st_size,
-                    "finished_at": int(stat.st_mtime),
-                })
+        for f in DOWNLOADS_ROOT.iterdir():
+            if not f.is_file(): continue
+            if _is_sidecar(f): continue
+            if f.suffix.lower() not in _MEDIA_EXTS: continue
+            if f.name in seen: continue
+            try: stat = f.stat()
+            except Exception: continue
+            out.append({
+                "id":          f"disk:{f.name}",
+                "vid":         f.stem,
+                "url":         f"https://www.youtube.com/watch?v={f.stem}",
+                "title":       f.stem,
+                "status":      "done",
+                "progress_pct":100.0,
+                "file_url":    f"/downloads/{urllib.parse.quote(f.name)}",
+                "file_name":   f.name,
+                "file_size_b": stat.st_size,
+                "finished_at": int(stat.st_mtime),
+                "has_idea":    f.with_suffix(".idea.json").exists(),
+            })
     out.sort(key=lambda j: -(j.get("finished_at") or j.get("created_at") or 0))
     return out
 
 def delete_job(job_id: str) -> bool:
-    """Stop in-memory job (if active) AND remove its file from disk
-    along with any sidecars (.vtt subtitles etc.) sitting next to it."""
+    """Stop in-memory job (if active) AND remove the file from disk
+    plus any sidecars sharing the same `<stem>.` prefix."""
+    target_file: Optional[Path] = None
     with _LOCK:
         job = JOBS.get(job_id)
     if job:
         job.stop()
-        if job.file:
-            _delete_file_with_sidecars(job.file)
+        target_file = job.file
         with _LOCK:
             JOBS.pop(job_id, None)
-        return True
-    # Disk-only entry. New format: "disk:<vid>/<filename>" — unambiguous
-    # because '/' never appears in vid (11-char [A-Za-z0-9_-]) or filename
-    # (we run yt-dlp with --restrict-filenames). Old format was
-    # "disk_<vid>_<filename>" which broke when vid contained underscores
-    # like "IFTw_j3uR-I".
-    if job_id.startswith("disk:"):
+    elif job_id.startswith("disk:"):
         rest = job_id[len("disk:"):]
+        # Old format was "disk:<vid>/<filename>" before the flat refactor.
+        # Strip the leading "<vid>/" so it still resolves under the flat
+        # root if the user has stale UI state from an older session.
         if "/" in rest:
-            vid, fname = rest.split("/", 1)
-            p = DOWNLOADS_ROOT / vid / fname
-            if p.exists():
-                _delete_file_with_sidecars(p)
-                return True
-    # Old-format compat: scan disk and match by regenerated id, ignoring
-    # how the id is split. Slow path but only fires for stale ids.
-    if job_id.startswith("disk_") and DOWNLOADS_ROOT.exists():
-        for vid_dir in DOWNLOADS_ROOT.iterdir():
-            if not vid_dir.is_dir(): continue
-            for f in vid_dir.iterdir():
-                if not f.is_file(): continue
-                if f"disk_{vid_dir.name}_{f.name}" == job_id:
-                    _delete_file_with_sidecars(f)
-                    return True
-    return False
+            rest = rest.split("/", 1)[1]
+        target_file = DOWNLOADS_ROOT / rest
+    if target_file is None or not target_file.exists():
+        return False
+    try:
+        _delete_file_with_sidecars(target_file)
+        return True
+    except Exception:
+        return False
 
 def _delete_file_with_sidecars(media_path: Path):
     """Remove the media file plus any sidecars sharing its stem
-    (Title.en.vtt, Title.whisper.en.vtt, Title.info.json, etc.)."""
+    (`<vid>.en.vtt`, `<vid>.ytdlp.log`, `<vid>.info.json`, etc.)."""
     if not media_path.exists(): return
     parent = media_path.parent
-    stem = media_path.stem
+    prefix = media_path.stem + "."
     try: media_path.unlink()
     except Exception: pass
-    # Walk all files in the same dir whose name starts with the same stem
-    # — yt-dlp writes "<stem>.<lang>.vtt", "<stem>.info.json" etc.
     if not parent.exists(): return
     for sib in parent.iterdir():
         if not sib.is_file(): continue
-        if sib == media_path: continue
-        if not sib.name.startswith(stem): continue
-        if _is_sidecar(sib):
+        if sib.name.startswith(prefix):
             try: sib.unlink()
             except Exception: pass
-    # If the vid folder is now empty, remove it too
-    try:
-        if not any(parent.iterdir()):
-            parent.rmdir()
-    except Exception: pass

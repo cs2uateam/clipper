@@ -5,988 +5,808 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>clipper</title>
 <style>
-:root { color-scheme: dark; --bg:#0e0f12; --panel:#171a20; --panel2:#1f232b;
-        --muted:#8b9099; --accent:#7c5cff; --accent2:#5d3dff;
-        --good:#2bd47d; --warn:#f7c04a; --err:#ff5d6c; --border:#262a33; --border2:#323744; }
+:root {
+  color-scheme: dark;
+  --bg:        #0b0d12;
+  --bg-2:      #11141b;
+  --sidebar:   #0e1117;
+  --card:      #141821;
+  --card-2:    #1a1f2b;
+  --card-hi:   #1f2532;
+  --border:    #232936;
+  --border-hi: #2e3548;
+  --muted:     #8a93a6;
+  --text:      #e8ecf3;
+  --text-soft: #b8c0d0;
+  --accent:    #8b6dff;
+  --accent-2:  #a387ff;
+  --accent-hi: #6e4cff;
+  --good:      #34d399;
+  --warn:      #fbbf24;
+  --err:       #f87171;
+  --info:      #60a5fa;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.45);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,.55);
+  --radius:    10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+}
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:#e6e8eb; font:14px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",Helvetica,sans-serif; }
-.wrap { max-width:1100px; margin:0 auto; padding:24px; }
-header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:18px; }
-h1 { margin:0; font-size:22px; font-weight:600; }
-h1 .v { color:var(--muted); font-weight:400; }
-h2 { margin:0; font-size:15px; font-weight:600; }
-.tag { color:var(--muted); font-size:12px; margin-top:4px; }
-/* Tabs */
-.tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:18px; }
-.tab { padding:10px 18px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; font-weight:500; font-size:13px; }
-.tab.active { color:#fff; border-bottom-color:var(--accent); }
-.tab:hover { color:#e6e8eb; }
-/* Stepper */
-.stepper { display:flex; gap:0; margin-bottom:20px; padding:14px 16px; background:var(--panel); border-radius:10px; border:1px solid var(--border); }
-.step { flex:1; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:12px; position:relative; }
-.step .num { width:24px; height:24px; border-radius:50%; background:#0a0b0e; border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; font-weight:600; flex-shrink:0; }
-.step.active { color:#fff; }
-.step.active .num { background:var(--accent); border-color:var(--accent); color:#fff; }
-.step.done { color:var(--good); }
-.step.done .num { background:var(--good); border-color:var(--good); color:#fff; }
-.step:not(:last-child)::after { content:""; position:absolute; right:0; top:50%; transform:translateY(-50%); height:1px; background:var(--border2); width:calc(100% - 130px); right:-15px; opacity:.5; display:none; }
-/* Cards */
-.card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:14px; }
-.card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; }
-.card-help { color:var(--muted); font-size:12px; line-height:1.5; margin-bottom:14px; padding:10px 12px; background:#0a0b0e; border-left:3px solid var(--accent); border-radius:4px; }
-/* Form controls */
-label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px; font-weight:500; }
-label .help { color:var(--muted); text-transform:none; letter-spacing:0; font-weight:400; margin-left:6px; opacity:.7; }
-input, textarea, select { width:100%; background:#0a0b0e; color:#e6e8eb; border:1px solid var(--border); border-radius:6px; padding:10px 12px; font:inherit; }
-input:focus, textarea:focus, select:focus { outline:none; border-color:var(--accent); }
-textarea { min-height:62px; resize:vertical; }
-button { background:var(--accent); color:#fff; border:0; padding:11px 20px; border-radius:6px; font:inherit; font-weight:600; cursor:pointer; transition:.1s; }
-button:hover:not(:disabled) { background:var(--accent2); }
-button:disabled { opacity:.4; cursor:not-allowed; }
-button.ghost { background:transparent; border:1px solid var(--border2); color:#e6e8eb; }
-button.ghost:hover:not(:disabled) { border-color:var(--accent); background:transparent; }
-button.tiny { padding:5px 10px; font-size:12px; font-weight:500; }
-button.danger { background:transparent; border:1px solid var(--err); color:var(--err); }
-button.danger:hover { background:var(--err); color:#fff; }
-.row { display:flex; gap:10px; align-items:end; flex-wrap:wrap; }
-.row > .col { flex:1; min-width:200px; }
-/* Preset cards */
-.presets { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:8px; margin-top:8px; }
-.preset { background:#0a0b0e; border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; transition:.1s; text-align:left; color:#e6e8eb; font-weight:500; }
-.preset:hover { border-color:var(--accent); background:#13141a; }
-.preset .name { font-size:13px; margin-bottom:3px; }
-.preset .desc { font-size:11px; color:var(--muted); font-weight:400; line-height:1.4; }
-/* Templates */
-.tpl-section { margin-top:14px; padding-top:14px; border-top:1px dashed var(--border); }
-.tpl-empty { color:var(--muted); font-size:12px; font-style:italic; }
-.tpl-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-.tpl-chip { background:#0a0b0e; border:1px solid var(--border); border-radius:14px; padding:5px 10px; font-size:12px; cursor:pointer; display:inline-flex; gap:6px; align-items:center; }
-.tpl-chip:hover { border-color:var(--accent); }
-.tpl-chip .x { color:var(--muted); cursor:pointer; padding:0 2px; }
-.tpl-chip .x:hover { color:var(--err); }
-/* Advanced */
-.adv-toggle { color:var(--muted); cursor:pointer; user-select:none; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px; }
-.adv-toggle:hover { color:#e6e8eb; }
-.adv-toggle .arrow { transition:.15s; display:inline-block; }
-.adv-toggle.open .arrow { transform:rotate(90deg); }
-.adv-content { display:none; margin-top:14px; padding:14px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; }
-.adv-content.open { display:block; }
-.adv-row { margin-bottom:14px; }
-.adv-row:last-child { margin-bottom:0; }
-/* Crop preview */
-.crop-vis { display:flex; align-items:center; gap:14px; }
-.crop-frame { width:160px; height:90px; background:linear-gradient(135deg,#3a3050,#1f1a30); border:1px solid var(--border2); border-radius:4px; position:relative; overflow:hidden; flex-shrink:0; }
-.crop-overlay { position:absolute; top:0; bottom:0; width:50.6px; background:rgba(124,92,255,.3); border:2px solid var(--accent); transition:.1s; }
-.crop-frame .ui { position:absolute; right:4px; top:4px; width:30px; height:14px; background:rgba(255,80,80,.4); border-radius:2px; font-size:7px; color:#fff; text-align:center; line-height:14px; font-weight:600; }
-.crop-frame .ui2 { position:absolute; left:50%; top:4px; transform:translateX(-50%); width:50px; height:8px; background:rgba(255,255,255,.2); border-radius:2px; }
-.crop-slider { display:flex; align-items:center; gap:10px; flex:1; }
-.crop-slider input[type=range] { flex:1; }
-.crop-val { font-family:ui-monospace,monospace; color:var(--accent); min-width:42px; text-align:right; font-size:13px; }
-/* Hook style picker */
-.hook-styles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
-.hook-style { background:#0a0b0e; border:1px solid var(--border); border-radius:6px; padding:18px 8px; text-align:center; cursor:pointer; }
-.hook-style:hover { border-color:var(--accent); }
-.hook-style.picked { border-color:var(--accent); background:#191430; }
-.hook-style .preview { font-size:14px; font-weight:700; margin-bottom:5px; line-height:1.1; }
-.hook-style .label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
-.hook-style.shout .preview { color:#facc15; text-shadow:0 0 1px #000, 1px 1px 0 #000; }
-.hook-style.calm .preview { color:#fff; font-family:Georgia,serif; }
-.hook-style.pixel .preview { color:#00ff88; font-family:ui-monospace,monospace; text-transform:lowercase; }
-.hook-style.auto .preview { color:#fff; }
-/* Status / progress */
-.status { padding:12px 14px; border-radius:6px; background:#0a0b0e; border-left:3px solid var(--accent); font-size:13px; }
-.status.idle { color:var(--muted); }
-.status.run { color:#fff; }
-.status.err { border-left-color:var(--err); color:var(--err); }
-.status.done { border-left-color:var(--good); color:var(--good); }
-.status .stage { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.status .stage .elapsed { color:var(--muted); font-weight:400; font-family:ui-monospace,monospace; font-size:12px; }
-.status .stage .elapsed.stuck { color:var(--warn); }
-.status .detail { color:var(--muted); font-size:12px; margin-top:2px; font-family:ui-monospace,monospace; }
-.status .loglist { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); font-family:ui-monospace,monospace; font-size:11px; line-height:1.5; max-height:140px; overflow-y:auto; }
-.status .loglist .ll { color:var(--muted); }
-.status .loglist .ll:last-child { color:#e6e8eb; }
-.status .loglist .ll .ts { opacity:.5; margin-right:8px; }
-/* Phase-oriented progress */
-.phases { display:flex; flex-direction:column; gap:2px; margin-top:10px; }
-.phase { padding:5px 0; transition:opacity .2s; }
-.phase.pending { opacity:.32; }
-.phase .ph-row { display:flex; align-items:center; gap:10px; font-size:13px; }
-.phase .ph-icon { font-family:ui-monospace,monospace; width:14px; text-align:center; font-size:13px; flex-shrink:0; }
-.phase .ph-label { flex:1; color:#bcc1cb; }
-.phase .ph-time { color:var(--muted); font-family:ui-monospace,monospace; font-size:11px; }
-.phase.done .ph-icon { color:var(--good); }
-.phase.done .ph-label { color:var(--muted); }
-.phase.active .ph-icon { color:var(--accent); animation:phasePulse 1.4s ease-in-out infinite; }
-.phase.active .ph-label { color:#fff; font-weight:500; }
-.phase .ph-sub { margin-left:26px; margin-top:4px; }
-.phase .ph-sub-text { font-size:11px; color:var(--muted); font-family:ui-monospace,monospace; }
-.phase .ph-bar { height:3px; background:#1a1d23; border-radius:2px; margin-top:3px; overflow:hidden; }
-.phase .ph-bar-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .3s linear; }
-@keyframes phasePulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-.raw-log { margin-top:10px; }
-.raw-log summary { cursor:pointer; user-select:none; padding:4px 0; font-size:11px; color:var(--muted); list-style:none; }
-.raw-log summary::-webkit-details-marker { display:none; }
-.raw-log summary::before { content:"▸ "; display:inline-block; transition:transform .15s; }
-.raw-log[open] summary::before { transform:rotate(90deg); }
-.raw-log summary:hover { color:#e6e8eb; }
-/* Candidates */
-/* VOD info badges + heatmap sparkline */
-.vod-info { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; font-size:11px; }
-.vod-info .badge { display:inline-flex; gap:4px; align-items:center; padding:3px 8px; border-radius:10px; background:#0a0b0e; border:1px solid var(--border); color:var(--muted); }
-.vod-info .badge.warn { border-color:var(--warn); color:var(--warn); }
-.vod-info .badge.good { border-color:var(--good); color:var(--good); }
-.vod-info .badge.info { border-color:var(--accent); color:var(--accent); }
-/* Live mode UI */
-.live-status { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:10px; margin:14px 0; }
-.live-stat { background:#0a0b0e; border:1px solid var(--border); border-radius:6px; padding:10px 12px; }
-.live-stat .label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
-.live-stat .val { font-size:20px; color:#fff; font-weight:600; font-family:ui-monospace,monospace; }
-.live-stat .sub { font-size:11px; color:var(--muted); margin-top:2px; }
-.live-stat.rec { border-color:var(--err); }
-.live-stat.rec .val { color:var(--err); }
-.live-stat.rec.active .val::before { content:"●"; color:var(--err); margin-right:6px; animation:liveBlink 1.2s ease-in-out infinite; }
-@keyframes liveBlink { 0%,100%{opacity:1} 50%{opacity:.3} }
-.score-canvas { width:100%; height:80px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:10px; display:block; }
-.live-chat { background:#0a0b0e; border:1px solid var(--border); border-radius:6px; padding:10px; max-height:240px; overflow-y:auto; font-size:12px; font-family:ui-monospace,monospace; }
-.live-chat .msg { margin-bottom:3px; line-height:1.4; }
-.live-chat .msg .a { color:var(--accent); margin-right:6px; }
-.live-chat .msg .ts { color:var(--muted); margin-right:6px; font-size:10px; }
-.trigger { background:#0a0b0e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
-.trigger.kw { border-left:3px solid var(--accent); }
-.trigger.score { border-left:3px solid var(--warn); }
-.trigger.done { border-left:3px solid var(--good); background:rgba(43,212,125,0.04); }
-.trigger.failed { border-left:3px solid var(--err); }
-.trigger-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
-.trigger-head .tt { font-family:ui-monospace,monospace; color:#fff; font-weight:600; font-size:13px; }
-.trigger-head .tag-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
-.trigger-head .tag-pill.kw { background:rgba(124,92,255,0.22); color:#b8a4ff; }
-.trigger-head .tag-pill.score { background:rgba(247,192,74,0.22); color:#ffd54f; }
-.trigger-head .tag-pill.chat { background:rgba(124,92,255,0.18); color:#b8a4ff; }
-.trigger-head .tag-pill.caster { background:rgba(43,212,125,0.18); color:#5fe8a8; }
-.trigger-head .scoreval { color:var(--muted); font-size:11px; font-family:ui-monospace,monospace; }
-.trigger-body { font-size:12px; color:#bcc1cb; line-height:1.5; }
-.trigger-body .src-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-top:6px; margin-bottom:2px; }
-.trigger-body .src-line { font-family:ui-monospace,monospace; font-size:11px; }
-.trigger-body .src-line .a { color:var(--accent); margin-right:6px; }
-.trigger-body mark { background:rgba(255, 213, 79, 0.28); color:#ffd54f; padding:0 3px; border-radius:2px; font-weight:600; }
-.trigger-actions { margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.trigger-actions button { padding:6px 12px; font-size:12px; font-weight:600; }
-.trigger-actions .status-text { font-size:11px; color:var(--muted); font-family:ui-monospace,monospace; }
-.trigger-clip-preview { margin-top:10px; }
-.trigger-clip-preview video { width:100%; max-height:340px; border-radius:6px; background:#000; }
-.trigger-clip-preview .meta { margin-top:6px; font-size:11px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; }
-.live-clip { background:#0a0b0e; border:1px solid var(--border); border-radius:8px; padding:0; margin-bottom:10px; overflow:hidden; }
-.live-clip video { width:100%; max-height:380px; display:block; background:#000; }
-.live-clip-meta { padding:10px 12px; }
-.live-clip-meta .h { color:var(--accent); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
-.live-clip-meta .c { font-size:13px; margin-bottom:4px; line-height:1.4; }
-.live-clip-meta .t { color:#9ad9ff; font-size:11px; margin-bottom:4px; }
-.live-clip-meta .info { color:var(--muted); font-size:11px; font-family:ui-monospace,monospace; }
-.kw-alert { padding:10px 14px; margin-bottom:10px; background:rgba(247,192,74,0.12); border:1px solid var(--warn); border-radius:6px; color:#ffd54f; font-size:13px; line-height:1.5; }
-.kw-alert strong { color:#fff; font-weight:600; }
-.kw-alert .kw-list { font-family:ui-monospace,monospace; color:#fff; padding:1px 6px; background:rgba(255,255,255,0.08); border-radius:3px; margin:0 2px; }
-.kw-alert .kw-hint { display:block; margin-top:4px; font-size:11px; color:var(--warn); opacity:.7; }
-.heat-canvas { width:100%; height:60px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:10px; cursor:pointer; display:block; }
-.heat-canvas.empty { display:none; }
-.cands { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:10px; }
-.cand { background:#0a0b0e; border:1px solid var(--border); border-radius:8px; padding:12px; cursor:pointer; transition:.1s; }
-.cand:hover { border-color:var(--accent); }
-.cand.picked { border-color:var(--accent); background:#191430; box-shadow:0 0 0 1px var(--accent) inset; }
-.cand-summary { font-size:14px; color:#fff; font-weight:500; line-height:1.35; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border); }
-.cand-summary.empty { color:var(--muted); font-weight:400; font-style:italic; }
-.cand-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
-.cand-rank { display:inline-block; background:var(--accent); color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px; margin-right:6px; }
-.cand-t { font-family:ui-monospace,monospace; color:#fff; font-weight:500; font-size:13px; }
-.cand-z { color:var(--good); font-weight:600; font-size:12px; }
-.cand-len { color:var(--muted); font-size:11px; margin-bottom:8px; }
-.cand-preview { display:inline-block; color:var(--accent); font-size:11px; text-decoration:none; padding:3px 8px; border:1px solid var(--accent); border-radius:4px; margin-bottom:8px; }
-.cand-preview:hover { background:var(--accent); color:#fff; }
-.cand-shift { display:none; margin:8px 0 4px; padding:8px 10px; background:#13141a; border:1px solid var(--border2); border-radius:4px; }
-.cand.picked .cand-shift { display:block; border-color:var(--accent); }
-.cand-shift label { font-size:10px; color:var(--muted); display:block; margin-bottom:4px; text-transform:none; letter-spacing:0; }
-.cand-shift .row { display:flex; gap:6px; align-items:center; }
-.cand-shift input[type=number] { width:70px; padding:5px 8px; font-size:12px; font-family:ui-monospace,monospace; }
-.cand-shift .unit { color:var(--muted); font-size:11px; }
-.cand-shift .new-t { font-family:ui-monospace,monospace; color:var(--good); font-size:11px; margin-top:4px; }
-.cand-shift label { font-size:10px; color:var(--muted); margin-bottom:4px; display:block; text-transform:none; letter-spacing:0; }
-.cand-shift .row { display:flex; gap:8px; align-items:center; }
-.cand-shift input[type=range] { flex:1; }
-.cand-shift .val { font-family:ui-monospace,monospace; color:var(--accent); font-size:11px; min-width:40px; text-align:right; }
-.cand-shift .new-t { font-family:ui-monospace,monospace; color:var(--good); font-size:11px; margin-top:4px; }
-.cand-msgs { font-size:12px; color:#bcc1cb; max-height:96px; overflow:hidden; }
-.cand-msgs > div { margin-bottom:2px; }
-.cand-msgs .t { color:var(--muted); font-family:ui-monospace,monospace; font-size:10px; margin-right:4px; }
-.cand-trans { font-size:12px; color:#9ad9ff; max-height:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
-.cand-trans .label { color:var(--muted); font-size:10px; text-transform:uppercase; margin-bottom:4px; }
-.cand-trans > div:not(.label) { margin-bottom:2px; line-height:1.5; }
-.cand-trans .t { color:var(--muted); font-family:ui-monospace,monospace; font-size:10px; margin-right:6px; }
-.cand-trans .kw-hit { color:#ffe082; }
-.cand-trans mark, .cand-reason mark { background:rgba(255, 213, 79, 0.28); color:#ffd54f; padding:0 3px; border-radius:2px; font-weight:600; }
-.cand-reason { font-size:12px; color:#bcc1cb; padding:6px 10px; margin:4px 0 6px; background:#0c0d11; border-left:2px solid var(--accent); border-radius:0 4px 4px 0; line-height:1.6; }
-.cand-reason .r-key { color:var(--muted); font-size:11px; text-transform:lowercase; margin-right:2px; }
-.cand-why { font-size:13px; color:#fff; padding:8px 10px; margin-bottom:10px; background:linear-gradient(90deg, rgba(124,92,255,0.18), rgba(124,92,255,0.06)); border-left:3px solid var(--accent); border-radius:0 4px 4px 0; line-height:1.4; font-weight:500; }
-.cand-why .why-tag { display:inline-block; padding:1px 6px; border-radius:3px; font-size:11px; margin-right:5px; font-weight:600; }
-.cand-why .why-tag.heatmap { background:rgba(124,92,255,0.25); color:#b8a4ff; }
-.cand-why .why-tag.audio { background:rgba(247,192,74,0.22); color:#ffd54f; }
-.cand-why .why-tag.captions { background:rgba(43,212,125,0.22); color:#5fe8a8; }
-.cand-why .why-tag.corrob { background:rgba(255,93,108,0.22); color:#ff8b9a; }
-.cand-why .why-tag.chapter { background:rgba(154,217,255,0.18); color:#9ad9ff; }
-.cand-why .why-text { color:#bcc1cb; font-size:12px; font-weight:400; margin-top:3px; }
-/* Results */
-.results { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:14px; }
-.result { background:#0a0b0e; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.result video { width:100%; display:block; background:#000; max-height:380px; }
-.result-meta { padding:10px 12px; font-size:12px; }
-.result-hook { color:var(--accent); font-size:11px; font-weight:700; text-transform:uppercase; margin-bottom:6px; letter-spacing:.5px; }
-.result-cap { font-weight:500; margin-bottom:6px; line-height:1.4; }
-.result-tags { color:#9ad9ff; font-size:11px; margin:6px 0 6px; line-height:1.5; word-break:break-word; }
-.result-tags .copy { color:var(--muted); cursor:pointer; margin-left:6px; }
-.result-tags .copy:hover { color:var(--accent); }
-.result-info { color:var(--muted); font-size:11px; }
-.result a { color:var(--accent); text-decoration:none; font-size:12px; font-weight:500; }
-/* History */
-.h-item { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; gap:10px; }
-.h-item .meta { font-size:11px; color:var(--muted); margin-top:2px; }
-.h-item .title { color:#e6e8eb; font-weight:500; font-size:13px; }
-.h-empty { color:var(--muted); font-size:13px; padding:20px; text-align:center; font-style:italic; }
-/* Tooltip */
-[data-tip] { cursor:help; border-bottom:1px dashed var(--muted); }
-/* Floating progress badge — visible regardless of scroll */
-.float-prog { position:fixed; top:16px; right:16px; z-index:1000;
-  background:var(--panel); border:1px solid var(--accent); border-radius:8px;
-  padding:10px 14px; font-size:12px; min-width:240px; max-width:340px;
-  box-shadow:0 8px 24px rgba(0,0,0,.5); display:none; cursor:pointer; }
-.float-prog.show { display:block; }
-.float-prog.done { border-color:var(--good); }
-.float-prog.err { border-color:var(--err); }
-.float-prog .fp-stage { font-weight:600; color:#fff; margin-bottom:4px;
-  display:flex; justify-content:space-between; gap:8px; align-items:center; }
-.float-prog .fp-elapsed { color:var(--muted); font-weight:400; font-family:ui-monospace,monospace; font-size:11px; }
-.float-prog .fp-detail { color:var(--muted); font-size:11px; font-family:ui-monospace,monospace;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.float-prog .fp-hint { color:var(--accent); font-size:10px; margin-top:4px; text-transform:uppercase; letter-spacing:.5px; }
-.code { font-family:ui-monospace,monospace; font-size:12px; background:#0a0b0e; padding:2px 6px; border-radius:3px; color:#9ad9ff; }
-@media (max-width:600px) {
-  .stepper { flex-wrap:wrap; gap:8px; }
-  .step { flex-basis:45%; }
-  .hook-styles { grid-template-columns:repeat(2,1fr); }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
+        Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+/* ============ SHELL ============ */
+.app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+.sidebar {
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  padding: 22px 14px;
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; gap: 22px;
+  overflow-y: auto;
+}
+.brand {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 8px 4px;
+}
+.brand-logo {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hi));
+  display: grid; place-items: center; font-size: 20px;
+  box-shadow: 0 4px 14px rgba(139, 109, 255, .35);
+}
+.brand-name { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+.brand-ver  { font-size: 11px; color: var(--muted); margin-top: -2px; }
+
+.nav-section { display: flex; flex-direction: column; gap: 4px; }
+.nav-label {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); padding: 0 12px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  color: var(--text-soft); cursor: pointer; user-select: none;
+  text-decoration: none; transition: background .12s, color .12s;
+  font-size: 13.5px; font-weight: 500;
+}
+.nav-item:hover { background: var(--card); color: var(--text); }
+.nav-item.active {
+  background: linear-gradient(180deg, rgba(139,109,255,.18), rgba(139,109,255,.10));
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(139,109,255,.35);
+}
+.nav-icon {
+  width: 22px; height: 22px; display: grid; place-items: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.nav-spacer { flex: 1; }
+.sidebar-foot {
+  padding: 10px 12px; font-size: 11px; color: var(--muted);
+  border-top: 1px solid var(--border); margin-top: 10px;
+}
+
+/* ============ CONTENT AREA ============ */
+.content {
+  padding: 32px 40px 60px;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;   /* center within the right column of the app grid */
+}
+.tab-page { display: block; }
+.page-head { margin-bottom: 22px; }
+.page-title {
+  font-size: 24px; font-weight: 700; letter-spacing: -.02em;
+  margin: 0 0 4px;
+}
+.page-sub {
+  color: var(--muted); font-size: 13px; line-height: 1.55;
+  max-width: 720px;
+}
+
+/* ============ FORMS / CARDS ============ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 18px;
+}
+.card-tight { padding: 16px; }
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+label {
+  display: block; font-size: 12px; color: var(--text-soft);
+  margin-bottom: 6px; font-weight: 500;
+}
+label .help {
+  color: var(--muted); font-size: 11px; font-weight: 400;
+  margin-left: 6px;
+}
+input[type=text], input[type=password], input[type=number],
+textarea, select {
+  width: 100%; background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 11px 13px; font: inherit;
+  transition: border-color .12s, background .12s;
+}
+input[type=text]:focus, input[type=password]:focus, input[type=number]:focus,
+textarea:focus, select:focus {
+  outline: none; border-color: var(--accent);
+  background: var(--card-2);
+}
+input[type=file] {
+  width: 100%; padding: 9px 11px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-soft);
+  font: inherit;
+}
+input[type=file]::file-selector-button {
+  background: var(--card-hi); color: var(--text);
+  border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+  padding: 6px 12px; margin-right: 12px; font: inherit; cursor: pointer;
+}
+input[type=file]::file-selector-button:hover { border-color: var(--accent); }
+input[type=range] { accent-color: var(--accent); }
+input[type=checkbox] { accent-color: var(--accent); width: auto; }
+
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; }
+}
+
+/* Buttons */
+button {
+  background: linear-gradient(180deg, var(--accent), var(--accent-hi));
+  color: #fff; border: 0; padding: 11px 20px;
+  border-radius: var(--radius-sm); font: inherit; font-weight: 600;
+  cursor: pointer; letter-spacing: .01em;
+  transition: transform .08s, filter .12s, background .12s;
+  box-shadow: 0 2px 8px rgba(139, 109, 255, .25);
+}
+button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+button:active:not(:disabled) { transform: translateY(0); }
+button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+button.ghost {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border-hi); box-shadow: none;
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--card-hi); border-color: var(--accent);
+  filter: none;
+}
+button.tiny {
+  padding: 6px 11px; font-size: 12px; font-weight: 500;
+  letter-spacing: 0;
+}
+button.danger {
+  background: transparent; color: var(--err);
+  border: 1px solid rgba(248, 113, 113, .3); box-shadow: none;
+}
+button.danger:hover:not(:disabled) {
+  background: var(--err); color: #fff; border-color: var(--err);
+}
+button.big { padding: 13px 26px; font-size: 14px; }
+
+/* Tags */
+.tag {
+  display: inline-block; padding: 3px 9px;
+  font-size: 11px; color: var(--muted);
+  background: var(--bg-2); border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.code {
+  font-family: ui-monospace, Menlo, monospace;
+  background: var(--bg-2); padding: 1px 7px;
+  border-radius: 4px; font-size: 12px;
+}
+
+/* ============ ACTIVE JOB PANEL ============ */
+.active-job {
+  margin-top: 18px; padding: 16px;
+  background: linear-gradient(180deg, rgba(139,109,255,.08), rgba(139,109,255,.03));
+  border: 1px solid rgba(139,109,255,.4);
+  border-radius: var(--radius);
+}
+.active-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; gap: 12px;
+}
+.active-title {
+  color: #fff; font-weight: 600; font-size: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bar-track {
+  height: 6px; background: var(--bg-2);
+  border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+}
+.bar-fill {
+  height: 100%; background: var(--accent); width: 0%;
+  transition: width .3s;
+}
+.active-stats {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted);
+}
+
+/* ============ FILES LIST ============ */
+.files-section { margin-top: 24px; }
+.files-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.files-title {
+  font-size: 13px; font-weight: 600; color: var(--text-soft);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+#dlList, #upList, #igList, #ttList {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.empty-state {
+  padding: 32px; text-align: center; color: var(--muted);
+  background: var(--bg-2); border-radius: var(--radius);
+  border: 1px dashed var(--border);
+}
+.empty-state .emoji { font-size: 32px; opacity: .5; margin-bottom: 8px; }
+
+/* ============ MODAL ============ */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(5, 7, 12, .82);
+  backdrop-filter: blur(3px);
+  z-index: 1000; overflow-y: auto;
+  padding: 30px 16px;
+  display: none;
+}
+.modal-bg.open { display: block; }
+.modal-card {
+  max-width: 720px; margin: 0 auto;
+  background: var(--card);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+.modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.modal-title { margin: 0; font-size: 16px; color: #fff; font-weight: 600; }
+
+/* ============ TOASTS ============ */
+#toasts {
+  position: fixed; right: 20px; bottom: 20px; z-index: 2000;
+  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  background: var(--card);
+  border: 1px solid var(--border-hi);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 16px; min-width: 280px; max-width: 360px;
+  box-shadow: var(--shadow-lg);
+  animation: toast-in .25s ease-out;
+  color: var(--text); font-size: 13px;
+}
+.toast.good { border-left-color: var(--good); }
+.toast.warn { border-left-color: var(--warn); }
+.toast.err  { border-left-color: var(--err);  }
+.toast .toast-title { font-weight: 600; margin-bottom: 2px; }
+.toast .toast-sub   { color: var(--muted); font-size: 11.5px; font-family: ui-monospace, monospace; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* ============ FILE CARD ============ */
+.file-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color .12s, background .12s;
+}
+.file-card:hover {
+  border-color: var(--border-hi);
+  background: var(--card-2);
+}
+.file-card .thumb {
+  width: 64px; height: 64px; flex-shrink: 0;
+  background: var(--bg-2); border-radius: var(--radius-sm);
+  display: grid; place-items: center; font-size: 22px;
+  overflow: hidden;
+}
+.file-card .thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.file-card .meta { flex: 1; min-width: 0; }
+.file-card .meta .name {
+  color: #fff; font-weight: 500; font-size: 13.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 3px;
+}
+.file-card .meta .sub {
+  font-family: ui-monospace, monospace; font-size: 11px;
+  color: var(--muted);
+}
+.file-card .actions { display: flex; gap: 6px; flex-shrink: 0; }
+.file-card .actions a, .file-card .actions button {
+  padding: 6px 12px; font-size: 12px;
+}
+
+/* Has-idea highlight */
+.btn-idea-on {
+  border: 1px solid var(--good) !important;
+  color: var(--good) !important;
+}
+
+/* Drag-drop zone */
+.dropzone {
+  border: 2px dashed var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 48px 24px; text-align: center;
+  background: var(--bg-2);
+  transition: background .15s, border-color .15s;
+  cursor: pointer;
+}
+.dropzone:hover, .dropzone.drag {
+  border-color: var(--accent);
+  background: rgba(139, 109, 255, .06);
+}
+.dropzone .emoji { font-size: 40px; margin-bottom: 8px; opacity: .8; }
+.dropzone .big-text {
+  font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px;
+}
+.dropzone .small-text { color: var(--muted); font-size: 12.5px; }
+.dropzone.has-file {
+  border-style: solid; border-color: var(--good);
+  background: rgba(52, 211, 153, .05);
 }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1>clipper <span class="v">v1</span></h1>
-      <div class="tag">скачивание видео (YouTube / Instagram / TikTok / upload) + Gemini-описание для соцсетей</div>
+
+<!-- ============ IDEA MODAL ============ -->
+<div id="ideaModal" class="modal-bg" onclick="if(event.target.id==='ideaModal')ideaClose()">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 class="modal-title">🧠 Идея для <span id="ideaForFile" style="color:var(--accent); font-family:ui-monospace,monospace; font-size:13px"></span></h2>
+      <button class="ghost tiny" type="button" onclick="ideaClose()">×</button>
     </div>
-  </header>
 
-  <!-- ============ IDEA MODAL (Gemini) ============ -->
-  <div id="ideaModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:1000; overflow-y:auto; padding:30px 16px" onclick="if(event.target.id==='ideaModal')ideaClose()">
-    <div style="max-width:720px; margin:0 auto; background:#13141a; border:1px solid var(--accent); border-radius:8px; padding:20px">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
-        <h2 style="margin:0; font-size:16px; color:#fff">🧠 Идея для <span id="ideaForFile" style="color:var(--accent); font-family:ui-monospace,monospace; font-size:13px"></span></h2>
-        <button class="ghost tiny" onclick="ideaClose()">×</button>
+    <div id="ideaKeyBlock" style="margin-bottom:16px">
+      <label>Gemini API key <span class="help">— живёт только в этой вкладке (sessionStorage), на сервере не сохраняется</span></label>
+      <div style="display:flex; gap:8px">
+        <input id="ideaKey" type="password" placeholder="AIzaSy..." style="flex:1; font-family:ui-monospace,monospace">
+        <button onclick="ideaRun()" id="ideaRunBtn">▶ Запустить</button>
       </div>
-
-      <div id="ideaKeyBlock" style="margin-bottom:16px">
-        <label style="margin-bottom:4px">Gemini API key <span class="help">— живёт только в этой вкладке (sessionStorage), на сервере не сохраняется</span></label>
-        <div style="display:flex; gap:8px">
-          <input id="ideaKey" type="password" placeholder="AIzaSy..." style="flex:1; font-family:ui-monospace,monospace">
-          <button onclick="ideaRun()" id="ideaRunBtn">▶ Запустить</button>
-        </div>
-        <div style="margin-top:6px; display:flex; gap:12px; font-size:11px">
-          <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">получить ключ</a>
-          <a href="javascript:ideaForgetKey()" style="color:var(--muted)">забыть ключ</a>
-        </div>
+      <div style="margin-top:6px; display:flex; gap:14px; font-size:11px">
+        <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">получить ключ</a>
+        <a href="javascript:ideaForgetKey()" style="color:var(--muted)">забыть ключ</a>
       </div>
+    </div>
 
-      <div id="ideaProgress" style="display:none; padding:14px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:16px">
-        <div style="height:6px; background:#171a20; border-radius:3px; overflow:hidden; margin-bottom:8px">
-          <div id="ideaBar" style="height:100%; background:var(--accent); width:0%; transition:width .3s"></div>
-        </div>
-        <div id="ideaPhase" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--muted)"></div>
-      </div>
+    <div id="ideaProgress" style="display:none; padding:14px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:16px">
+      <div class="bar-track" style="margin-bottom:8px"><div id="ideaBar" class="bar-fill"></div></div>
+      <div id="ideaPhase" style="font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted)"></div>
+    </div>
 
-      <div id="ideaResult" style="display:none"></div>
+    <div id="ideaResult" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ============ CONFIRM MODAL ============ -->
+<div id="confirmModal" class="modal-bg">
+  <div class="modal-card" style="max-width:420px">
+    <div id="confirmText" style="color:var(--text); margin-bottom:20px; font-size:14px; line-height:1.55"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end">
+      <button class="ghost" id="confirmCancel">Отмена</button>
+      <button class="danger" id="confirmOk">Удалить</button>
     </div>
   </div>
+</div>
 
-  <div class="tabs">
-    <div class="tab active" data-tab="download" onclick="switchTab('download'); dlOnTabOpen()">▶️ YouTube</div>
-    <div class="tab" data-tab="insta" onclick="switchTab('insta'); igOnTabOpen()">📸 Instagram</div>
-    <div class="tab" data-tab="tiktok" onclick="switchTab('tiktok'); ttOnTabOpen()">🎵 TikTok</div>
-    <div class="tab" data-tab="upload" onclick="switchTab('upload'); upOnTabOpen()">📤 Загрузить</div>
-  </div>
+<!-- ============ TOAST CONTAINER ============ -->
+<div id="toasts"></div>
 
-  <!-- ============ DOWNLOAD TAB ============ -->
-  <div id="tab-download">
-    <div class="card">
-      <div class="card-head">
-        <h2>📥 Скачать видос целиком</h2>
+<!-- ============ APP SHELL ============ -->
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">🎬</div>
+      <div>
+        <div class="brand-name">clipper</div>
+        <div class="brand-ver">v1 · 8767</div>
       </div>
-      <div class="card-help">
-        Просто скачать YouTube видео файлом. Без анализа, без нарезки. Можно с диапазоном времени, можно только аудио, можно с субтитрами.
-        Файлы попадают в <span class="code">youtube-analyzer/v1/downloads/&lt;video_id&gt;/</span>.
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Источники</div>
+      <a class="nav-item tab active" data-tab="download" onclick="switchTab('download'); dlOnTabOpen()">
+        <span class="nav-icon">▶️</span><span>YouTube</span>
+      </a>
+      <a class="nav-item tab" data-tab="insta" onclick="switchTab('insta'); igOnTabOpen()">
+        <span class="nav-icon">📸</span><span>Instagram</span>
+      </a>
+      <a class="nav-item tab" data-tab="tiktok" onclick="switchTab('tiktok'); ttOnTabOpen()">
+        <span class="nav-icon">🎵</span><span>TikTok</span>
+      </a>
+      <a class="nav-item tab" data-tab="upload" onclick="switchTab('upload'); upOnTabOpen()">
+        <span class="nav-icon">📤</span><span>Загрузить</span>
+      </a>
+    </div>
+
+    <div class="nav-spacer"></div>
+    <div class="sidebar-foot">
+      Скачивание видео + Gemini-описания для соцсетей.
+      Аналайзер на :8766.
+    </div>
+  </aside>
+
+  <main class="content">
+
+    <!-- ============ YOUTUBE TAB ============ -->
+    <div id="tab-download" class="tab-page">
+      <div class="page-head">
+        <h1 class="page-title">▶️ YouTube</h1>
+        <div class="page-sub">Скачать YouTube-ролик целиком или фрагмент. Опционально — субтитры (VTT или Whisper-транскрипция), вшивание в кадр и кроп под нужный aspect.</div>
       </div>
 
-      <div style="margin-bottom:14px">
-        <label>Ссылка на YouTube видео</label>
-        <input id="dlUrl" placeholder="https://www.youtube.com/watch?v=...">
-      </div>
-
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px">
-        <div>
-          <label>Качество</label>
-          <select id="dlQuality">
-            <option value="720">720p (быстрее, меньше)</option>
-            <option value="1080" selected>1080p (рекомендуется)</option>
-            <option value="1440">1440p (2K)</option>
-            <option value="2160">2160p (4K, если доступно)</option>
-            <option value="best">best — макс что есть</option>
-          </select>
+      <div class="card">
+        <div class="field">
+          <label>Ссылка на видео</label>
+          <input id="dlUrl" type="text" placeholder="https://www.youtube.com/watch?v=...">
         </div>
-        <div>
-          <label>Только аудио</label>
-          <div style="display:flex; gap:10px; align-items:center; padding:11px 0">
-            <label style="display:inline-flex; align-items:center; gap:6px; margin:0; text-transform:none; letter-spacing:0">
-              <input type="checkbox" id="dlAudioOnly" onchange="dlAudioOnlyChange()" style="width:auto">
-              <span>извлечь дорожку</span>
-            </label>
-            <select id="dlAudioFormat" disabled style="width:auto; min-width:100px">
-              <option value="mp3" selected>mp3</option>
-              <option value="m4a">m4a</option>
+
+        <div class="grid-2">
+          <div class="field">
+            <label>Качество</label>
+            <select id="dlQuality">
+              <option value="720">720p (быстрее, меньше)</option>
+              <option value="1080" selected>1080p (рекомендуется)</option>
+              <option value="1440">1440p (2K)</option>
+              <option value="2160">2160p (4K, если доступно)</option>
+              <option value="best">best — макс что есть</option>
             </select>
           </div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <label>Диапазон времени <span class="help">(пусто = всё видео; формат HH:MM:SS, MM:SS или секунды)</span></label>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          <span class="unit" style="color:var(--muted); font-size:12px">от</span>
-          <input id="dlRangeStart" type="text" placeholder="0:00:00" style="width:110px; font-family:ui-monospace,monospace">
-          <span class="unit" style="color:var(--muted); font-size:12px">до</span>
-          <input id="dlRangeEnd" type="text" placeholder="до конца" style="width:110px; font-family:ui-monospace,monospace">
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <label style="display:inline-flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0">
-          <input type="checkbox" id="dlSubs" onchange="dlSubsChange()" style="width:auto">
-          <span>скачать субтитры (en) <span class="help">— если у YouTube нет captions, автоматом запустится Whisper</span></span>
-        </label>
-        <label style="display:flex; align-items:flex-start; gap:6px; text-transform:none; letter-spacing:0; margin-top:6px; padding-left:20px">
-          <input type="checkbox" id="dlBurnSubs" disabled onchange="dlBurnChange()" style="width:auto; margin-top:3px">
-          <span>🎬 <strong>вшить в видео</strong> <span class="help">— субтитры впечатываются прямо в кадр. Re-encode — медленнее, но работает везде (TikTok/Reels/TG).</span></span>
-        </label>
-
-        <div id="dlSubsStyle" style="display:none; margin-top:10px; margin-left:20px; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px">
-          <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px">
-            <div>
-              <label style="margin-bottom:4px">Размер</label>
-              <select id="dlSubsSize" style="width:100%">
-                <option value="small">small (2.5%)</option>
-                <option value="medium" selected>medium (3.5%)</option>
-                <option value="large">large (4.5%)</option>
-                <option value="huge">huge (6%)</option>
-              </select>
-            </div>
-            <div>
-              <label style="margin-bottom:4px">Цвет текста</label>
-              <select id="dlSubsColor" style="width:100%">
-                <option value="white" selected>⚪ белый</option>
-                <option value="yellow">🟡 жёлтый</option>
-                <option value="red">🔴 красный</option>
-                <option value="green">🟢 зелёный</option>
-                <option value="cyan">🔵 cyan</option>
-                <option value="black">⚫ чёрный</option>
-              </select>
-            </div>
-            <div>
-              <label style="margin-bottom:4px">Фон</label>
-              <select id="dlSubsBg" style="width:100%">
-                <option value="none" selected>нет (только обводка)</option>
-                <option value="shadow">тень</option>
-                <option value="dark_box">тёмный box (50%)</option>
-                <option value="solid_box">solid чёрный box</option>
-              </select>
-            </div>
-            <div>
-              <label style="margin-bottom:4px">Позиция</label>
-              <select id="dlSubsPosition" style="width:100%">
-                <option value="bottom" selected>внизу</option>
-                <option value="top">сверху</option>
-                <option value="center">по центру</option>
+          <div class="field">
+            <label>Только аудио</label>
+            <div class="row" style="padding-top:6px">
+              <label style="display:inline-flex; align-items:center; gap:8px; margin:0; font-weight:400">
+                <input type="checkbox" id="dlAudioOnly" onchange="dlAudioOnlyChange()">
+                <span>извлечь дорожку</span>
+              </label>
+              <select id="dlAudioFormat" disabled style="width:auto">
+                <option value="mp3" selected>mp3</option>
+                <option value="m4a">m4a</option>
               </select>
             </div>
           </div>
         </div>
-      </div>
 
-      <div style="display:flex; gap:10px; margin-top:18px">
-        <button id="dlStartBtn" onclick="dlStart()">▶ Скачать</button>
-      </div>
-
-      <div id="dlActiveJob" style="display:none; margin-top:18px; padding:12px; background:#0a0b0e; border:1px solid var(--accent); border-radius:6px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-          <div id="dlActiveTitle" style="color:#fff; font-weight:600; font-size:14px"></div>
-          <button class="danger tiny" onclick="dlStop()">⏹ Стоп</button>
+        <div class="field">
+          <label>Формат клипа <span class="help">(crop в выбранный aspect; «как есть» — без обработки)</span></label>
+          <div class="row">
+            <select id="dlAspect" onchange="dlAspectChange()" style="max-width:340px">
+              <option value="source" selected>как есть — без обработки</option>
+              <option value="9:16">9:16 — TikTok / Shorts (вертикальный)</option>
+              <option value="16:9">16:9 — YouTube / Twitter (горизонтальный)</option>
+              <option value="1:1">1:1 — Instagram квадрат</option>
+              <option value="4:5">4:5 — Instagram пост</option>
+              <option value="custom">Кастомный…</option>
+            </select>
+            <input id="dlAspectCustom" type="text" placeholder="напр. 21:9" style="max-width:140px; display:none">
+          </div>
         </div>
-        <div style="height:6px; background:#171a20; border-radius:3px; overflow:hidden; margin-bottom:6px">
-          <div id="dlActiveBar" style="height:100%; background:var(--accent); width:0%; transition:width .3s"></div>
+
+        <div class="field">
+          <label>Диапазон времени <span class="help">(пусто = всё видео; формат HH:MM:SS, MM:SS или секунды)</span></label>
+          <div class="row">
+            <span style="color:var(--muted); font-size:12px">от</span>
+            <input id="dlRangeStart" type="text" placeholder="0:00:00" style="max-width:130px; font-family:ui-monospace,monospace">
+            <span style="color:var(--muted); font-size:12px">до</span>
+            <input id="dlRangeEnd" type="text" placeholder="до конца" style="max-width:130px; font-family:ui-monospace,monospace">
+          </div>
         </div>
-        <div id="dlActiveStats" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--muted)"></div>
+
+        <div class="field">
+          <label style="display:inline-flex; align-items:center; gap:8px; font-weight:400">
+            <input type="checkbox" id="dlSubs" onchange="dlSubsChange()">
+            <span>скачать субтитры (en) <span class="help">— если у YouTube нет captions, автоматом запустится Whisper</span></span>
+          </label>
+          <label style="display:flex; align-items:flex-start; gap:8px; margin-top:8px; padding-left:24px; font-weight:400">
+            <input type="checkbox" id="dlBurnSubs" disabled onchange="dlBurnChange()" style="margin-top:3px">
+            <span>🎬 <strong>вшить в видео</strong> <span class="help">— субтитры впечатываются прямо в кадр (re-encode, медленнее, но работает везде)</span></span>
+          </label>
+
+          <div id="dlSubsStyle" style="display:none; margin-top:12px; margin-left:24px; padding:14px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+            <div class="grid-2">
+              <div>
+                <label>Размер</label>
+                <select id="dlSubsSize">
+                  <option value="small">small (2.5%)</option>
+                  <option value="medium" selected>medium (3.5%)</option>
+                  <option value="large">large (4.5%)</option>
+                  <option value="huge">huge (6%)</option>
+                </select>
+              </div>
+              <div>
+                <label>Цвет</label>
+                <select id="dlSubsColor">
+                  <option value="white" selected>⚪ белый</option>
+                  <option value="yellow">🟡 жёлтый</option>
+                  <option value="red">🔴 красный</option>
+                  <option value="green">🟢 зелёный</option>
+                  <option value="cyan">🔵 cyan</option>
+                  <option value="black">⚫ чёрный</option>
+                </select>
+              </div>
+              <div>
+                <label>Фон</label>
+                <select id="dlSubsBg">
+                  <option value="none" selected>нет (только обводка)</option>
+                  <option value="shadow">тень</option>
+                  <option value="dark_box">тёмный box</option>
+                  <option value="solid_box">solid чёрный box</option>
+                </select>
+              </div>
+              <div>
+                <label>Позиция</label>
+                <select id="dlSubsPosition">
+                  <option value="bottom" selected>внизу</option>
+                  <option value="top">сверху</option>
+                  <option value="center">по центру</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button id="dlStartBtn" class="big" onclick="dlStart()">▶ Скачать</button>
+        </div>
+
+        <div id="dlActiveJob" class="active-job" style="display:none">
+          <div class="active-row">
+            <div class="active-title" id="dlActiveTitle"></div>
+            <button class="danger tiny" onclick="dlStop()">⏹ Стоп</button>
+          </div>
+          <div class="bar-track"><div id="dlActiveBar" class="bar-fill"></div></div>
+          <div id="dlActiveStats" class="active-stats"></div>
+        </div>
       </div>
 
-      <div style="margin-top:24px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-          <h3 style="font-size:14px; margin:0">Скачанные</h3>
-          <button class="ghost tiny" onclick="dlRefreshList()">Обновить</button>
+      <div class="files-section">
+        <div class="files-head">
+          <div class="files-title">Скачанные</div>
+          <div style="display:flex; gap:8px">
+            <button class="ghost tiny" onclick="dlRefreshList()">Обновить</button>
+            <button class="danger tiny" onclick="dlDeleteAll()">🗑 Удалить все</button>
+          </div>
         </div>
         <div id="dlList"></div>
       </div>
     </div>
-  </div>
 
-  <!-- ============ UPLOAD TAB ============ -->
-  <div id="tab-upload" style="display:none">
-    <div class="card">
-      <div class="card-head">
-        <h2>📤 Загрузить свой видос с субтитрами</h2>
-      </div>
-      <div class="card-help">
-        Заливаешь свой mp4/mov/mkv → Whisper транскрибирует речь → ffmpeg вшивает субтитры в кадр. Тот же style picker что у скачивания. Файл попадает в <span class="code">youtube-analyzer/v1/uploads/&lt;run_id&gt;/</span>.
+    <!-- ============ INSTAGRAM TAB ============ -->
+    <div id="tab-insta" class="tab-page" style="display:none">
+      <div class="page-head">
+        <h1 class="page-title">📸 Instagram</h1>
+        <div class="page-sub">Только публичные reels/posts по ссылке. Без cookies, без логина. Опционально Whisper-субтитры + вшивание в кадр.</div>
       </div>
 
-      <div style="margin-bottom:14px">
-        <label>Файл видео <span class="help">(mp4 / mov / mkv / webm / avi)</span></label>
-        <input id="upFile" type="file" accept="video/*,.mp4,.mov,.mkv,.webm,.avi,.m4v" style="padding:8px 12px">
-      </div>
+      <div class="card">
+        <div class="field">
+          <label>URL reel</label>
+          <input id="igUrl" type="text" placeholder="https://www.instagram.com/reel/ABC123/">
+        </div>
 
-      <label style="display:inline-flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0; margin-bottom:10px">
-        <input type="checkbox" id="upBurnSubs" onchange="upBurnChange()" style="width:auto">
-        <span>🎬 <strong>вшить субтитры в кадр</strong> <span class="help">— иначе только сгенерирует .vtt сбоку</span></span>
-      </label>
+        <div class="field">
+          <label style="display:inline-flex; align-items:center; gap:8px; font-weight:400">
+            <input type="checkbox" id="igSubs" onchange="igSubsChange()">
+            <span>📝 <strong>сгенерить субтитры через Whisper</strong> <span class="help">— платформа их не отдаёт</span></span>
+          </label>
 
-      <div id="upSubsStyle" style="display:none; margin-top:6px; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px">
-        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px">
-          <div>
-            <label style="margin-bottom:4px">Размер</label>
-            <select id="upSubsSize" style="width:100%">
-              <option value="small">small (2.5%)</option>
-              <option value="medium" selected>medium (3.5%)</option>
-              <option value="large">large (4.5%)</option>
-              <option value="huge">huge (6%)</option>
-            </select>
+          <div id="igBurnRow" style="display:none; margin-top:8px">
+            <label style="display:inline-flex; align-items:center; gap:8px; font-weight:400">
+              <input type="checkbox" id="igBurnSubs" checked onchange="igBurnChange()">
+              <span>🎬 <strong>вшить субтитры в кадр</strong></span>
+            </label>
           </div>
-          <div>
-            <label style="margin-bottom:4px">Цвет текста</label>
-            <select id="upSubsColor" style="width:100%">
-              <option value="white" selected>⚪ белый</option>
-              <option value="yellow">🟡 жёлтый</option>
-              <option value="red">🔴 красный</option>
-              <option value="green">🟢 зелёный</option>
-              <option value="cyan">🔵 cyan</option>
-              <option value="black">⚫ чёрный</option>
-            </select>
+
+          <div id="igSubsStyle" style="display:none; margin-top:12px; padding:14px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+            <div class="grid-2">
+              <div><label>Размер</label><select id="igSubsSize"><option value="small">small (2.5%)</option><option value="medium" selected>medium (3.5%)</option><option value="large">large (4.5%)</option><option value="huge">huge (6%)</option></select></div>
+              <div><label>Цвет</label><select id="igSubsColor"><option value="white" selected>⚪ белый</option><option value="yellow">🟡 жёлтый</option><option value="red">🔴 красный</option><option value="green">🟢 зелёный</option><option value="cyan">🔵 cyan</option><option value="black">⚫ чёрный</option></select></div>
+              <div><label>Фон</label><select id="igSubsBg"><option value="none" selected>нет</option><option value="shadow">тень</option><option value="dark_box">тёмный box</option><option value="solid_box">solid чёрный box</option></select></div>
+              <div><label>Позиция</label><select id="igSubsPosition"><option value="bottom" selected>внизу</option><option value="top">сверху</option><option value="center">по центру</option></select></div>
+            </div>
           </div>
-          <div>
-            <label style="margin-bottom:4px">Фон</label>
-            <select id="upSubsBg" style="width:100%">
-              <option value="none" selected>нет (только обводка)</option>
-              <option value="shadow">тень</option>
-              <option value="dark_box">тёмный box (50%)</option>
-              <option value="solid_box">solid чёрный box</option>
-            </select>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button id="igStartBtn" class="big" onclick="igStart()">▶ Скачать</button>
+        </div>
+
+        <div id="igActiveJob" class="active-job" style="display:none">
+          <div class="active-row">
+            <div class="active-title" id="igActiveTitle"></div>
+            <button class="danger tiny" onclick="igStop()">⏹ Стоп</button>
           </div>
-          <div>
-            <label style="margin-bottom:4px">Позиция</label>
-            <select id="upSubsPosition" style="width:100%">
-              <option value="bottom" selected>внизу</option>
-              <option value="top">сверху</option>
-              <option value="center">по центру</option>
-            </select>
-          </div>
+          <div class="bar-track"><div id="igActiveBar" class="bar-fill"></div></div>
+          <div id="igActiveStats" class="active-stats"></div>
         </div>
       </div>
 
-      <div style="display:flex; gap:10px; margin-top:18px">
-        <button id="upStartBtn" onclick="upStart()">▶ Обработать</button>
-      </div>
-
-      <div id="upActiveJob" style="display:none; margin-top:18px; padding:12px; background:#0a0b0e; border:1px solid var(--accent); border-radius:6px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-          <div id="upActiveTitle" style="color:#fff; font-weight:600; font-size:14px"></div>
-          <button class="danger tiny" onclick="upStop()">⏹ Стоп</button>
-        </div>
-        <div style="height:6px; background:#171a20; border-radius:3px; overflow:hidden; margin-bottom:6px">
-          <div id="upActiveBar" style="height:100%; background:var(--accent); width:0%; transition:width .3s"></div>
-        </div>
-        <div id="upActiveStats" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--muted)"></div>
-      </div>
-
-      <div style="margin-top:24px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-          <h3 style="font-size:14px; margin:0">Обработанные</h3>
-          <button class="ghost tiny" onclick="upRefreshList()">Обновить</button>
-        </div>
-        <div id="upList"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ INSTAGRAM TAB ============ -->
-  <div id="tab-insta" style="display:none">
-    <div class="card">
-      <div class="card-head">
-        <h2>📸 Скачать Instagram Reel</h2>
-      </div>
-      <div class="card-help">
-        Только публичные reels/posts по ссылке. Без cookies, без логина — что 403'ит, то не наше. Файл попадает в <span class="code">youtube-analyzer/v1/insta/&lt;reel_id&gt;/</span>. Опционально Whisper транскрипция + burn (тот же модуль что и в скачать/загрузить).
-      </div>
-
-      <div style="margin-bottom:14px">
-        <label>URL reel <span class="help">(instagram.com/reel/... или /reels/... или /p/...)</span></label>
-        <input id="igUrl" type="text" placeholder="https://www.instagram.com/reel/ABC123/">
-      </div>
-
-      <label style="display:inline-flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0; margin-bottom:10px">
-        <input type="checkbox" id="igSubs" onchange="igSubsChange()" style="width:auto">
-        <span>📝 <strong>сгенерить субтитры через Whisper</strong> <span class="help">— платформа их не отдаёт</span></span>
-      </label>
-
-      <div id="igBurnRow" style="display:none">
-        <label style="display:inline-flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0; margin-bottom:10px">
-          <input type="checkbox" id="igBurnSubs" checked onchange="igBurnChange()" style="width:auto">
-          <span>🎬 <strong>вшить субтитры в кадр</strong> <span class="help">— иначе только .vtt сбоку</span></span>
-        </label>
-      </div>
-
-      <div id="igSubsStyle" style="display:none; margin-top:6px; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px">
-        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px">
-          <div>
-            <label style="margin-bottom:4px">Размер</label>
-            <select id="igSubsSize" style="width:100%">
-              <option value="small">small (2.5%)</option>
-              <option value="medium" selected>medium (3.5%)</option>
-              <option value="large">large (4.5%)</option>
-              <option value="huge">huge (6%)</option>
-            </select>
+      <div class="files-section">
+        <div class="files-head">
+          <div class="files-title">Скачанные</div>
+          <div style="display:flex; gap:8px">
+            <button class="ghost tiny" onclick="igRefreshList()">Обновить</button>
+            <button class="danger tiny" onclick="igDeleteAll()">🗑 Удалить все</button>
           </div>
-          <div>
-            <label style="margin-bottom:4px">Цвет текста</label>
-            <select id="igSubsColor" style="width:100%">
-              <option value="white" selected>⚪ белый</option>
-              <option value="yellow">🟡 жёлтый</option>
-              <option value="red">🔴 красный</option>
-              <option value="green">🟢 зелёный</option>
-              <option value="cyan">🔵 cyan</option>
-              <option value="black">⚫ чёрный</option>
-            </select>
-          </div>
-          <div>
-            <label style="margin-bottom:4px">Фон</label>
-            <select id="igSubsBg" style="width:100%">
-              <option value="none" selected>нет (только обводка)</option>
-              <option value="shadow">тень</option>
-              <option value="dark_box">тёмный box (50%)</option>
-              <option value="solid_box">solid чёрный box</option>
-            </select>
-          </div>
-          <div>
-            <label style="margin-bottom:4px">Позиция</label>
-            <select id="igSubsPosition" style="width:100%">
-              <option value="bottom" selected>внизу</option>
-              <option value="top">сверху</option>
-              <option value="center">по центру</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex; gap:10px; margin-top:18px">
-        <button id="igStartBtn" onclick="igStart()">▶ Скачать</button>
-      </div>
-
-      <div id="igActiveJob" style="display:none; margin-top:18px; padding:12px; background:#0a0b0e; border:1px solid var(--accent); border-radius:6px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-          <div id="igActiveTitle" style="color:#fff; font-weight:600; font-size:14px"></div>
-          <button class="danger tiny" onclick="igStop()">⏹ Стоп</button>
-        </div>
-        <div style="height:6px; background:#171a20; border-radius:3px; overflow:hidden; margin-bottom:6px">
-          <div id="igActiveBar" style="height:100%; background:var(--accent); width:0%; transition:width .3s"></div>
-        </div>
-        <div id="igActiveStats" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--muted)"></div>
-      </div>
-
-      <div style="margin-top:24px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-          <h3 style="font-size:14px; margin:0">Скачанные</h3>
-          <button class="ghost tiny" onclick="igRefreshList()">Обновить</button>
         </div>
         <div id="igList"></div>
       </div>
     </div>
-  </div>
 
-  <!-- ============ TIKTOK TAB ============ -->
-  <div id="tab-tiktok" style="display:none">
-    <div class="card">
-      <div class="card-head">
-        <h2>🎵 Скачать TikTok видео</h2>
-      </div>
-      <div class="card-help">
-        Только публичные видео по ссылке. Принимает каноничные URL (<span class="code">tiktok.com/@user/video/...</span>) и короткие (<span class="code">vm.tiktok.com/...</span>, <span class="code">vt.tiktok.com/...</span>). Файл попадает в <span class="code">youtube-analyzer/v1/tiktok/&lt;video_id&gt;/</span>.
+    <!-- ============ TIKTOK TAB ============ -->
+    <div id="tab-tiktok" class="tab-page" style="display:none">
+      <div class="page-head">
+        <h1 class="page-title">🎵 TikTok</h1>
+        <div class="page-sub">Каноничные URL (<span class="code">tiktok.com/@user/video/...</span>) и короткие (<span class="code">vm.tiktok.com/...</span>, <span class="code">vt.tiktok.com/...</span>).</div>
       </div>
 
-      <div style="margin-bottom:14px">
-        <label>URL видео</label>
-        <input id="ttUrl" type="text" placeholder="https://www.tiktok.com/@user/video/7234567890123456789">
-      </div>
+      <div class="card">
+        <div class="field">
+          <label>URL видео</label>
+          <input id="ttUrl" type="text" placeholder="https://www.tiktok.com/@user/video/7234567890123456789">
+        </div>
 
-      <label style="display:inline-flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0; margin-bottom:10px">
-        <input type="checkbox" id="ttSubs" onchange="ttSubsChange()" style="width:auto">
-        <span>📝 <strong>сгенерить субтитры через Whisper</strong> <span class="help">— платформа их не отдаёт</span></span>
-      </label>
+        <div class="field">
+          <label style="display:inline-flex; align-items:center; gap:8px; font-weight:400">
+            <input type="checkbox" id="ttSubs" onchange="ttSubsChange()">
+            <span>📝 <strong>сгенерить субтитры через Whisper</strong></span>
+          </label>
 
-      <div id="ttBurnRow" style="display:none">
-        <label style="display:inline-flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0; margin-bottom:10px">
-          <input type="checkbox" id="ttBurnSubs" checked onchange="ttBurnChange()" style="width:auto">
-          <span>🎬 <strong>вшить субтитры в кадр</strong> <span class="help">— иначе только .vtt сбоку</span></span>
-        </label>
-      </div>
+          <div id="ttBurnRow" style="display:none; margin-top:8px">
+            <label style="display:inline-flex; align-items:center; gap:8px; font-weight:400">
+              <input type="checkbox" id="ttBurnSubs" checked onchange="ttBurnChange()">
+              <span>🎬 <strong>вшить субтитры в кадр</strong></span>
+            </label>
+          </div>
 
-      <div id="ttSubsStyle" style="display:none; margin-top:6px; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px">
-        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px">
-          <div>
-            <label style="margin-bottom:4px">Размер</label>
-            <select id="ttSubsSize" style="width:100%">
-              <option value="small">small (2.5%)</option>
-              <option value="medium" selected>medium (3.5%)</option>
-              <option value="large">large (4.5%)</option>
-              <option value="huge">huge (6%)</option>
-            </select>
+          <div id="ttSubsStyle" style="display:none; margin-top:12px; padding:14px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+            <div class="grid-2">
+              <div><label>Размер</label><select id="ttSubsSize"><option value="small">small (2.5%)</option><option value="medium" selected>medium (3.5%)</option><option value="large">large (4.5%)</option><option value="huge">huge (6%)</option></select></div>
+              <div><label>Цвет</label><select id="ttSubsColor"><option value="white" selected>⚪ белый</option><option value="yellow">🟡 жёлтый</option><option value="red">🔴 красный</option><option value="green">🟢 зелёный</option><option value="cyan">🔵 cyan</option><option value="black">⚫ чёрный</option></select></div>
+              <div><label>Фон</label><select id="ttSubsBg"><option value="none" selected>нет</option><option value="shadow">тень</option><option value="dark_box">тёмный box</option><option value="solid_box">solid чёрный box</option></select></div>
+              <div><label>Позиция</label><select id="ttSubsPosition"><option value="bottom" selected>внизу</option><option value="top">сверху</option><option value="center">по центру</option></select></div>
+            </div>
           </div>
-          <div>
-            <label style="margin-bottom:4px">Цвет текста</label>
-            <select id="ttSubsColor" style="width:100%">
-              <option value="white" selected>⚪ белый</option>
-              <option value="yellow">🟡 жёлтый</option>
-              <option value="red">🔴 красный</option>
-              <option value="green">🟢 зелёный</option>
-              <option value="cyan">🔵 cyan</option>
-              <option value="black">⚫ чёрный</option>
-            </select>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button id="ttStartBtn" class="big" onclick="ttStart()">▶ Скачать</button>
+        </div>
+
+        <div id="ttActiveJob" class="active-job" style="display:none">
+          <div class="active-row">
+            <div class="active-title" id="ttActiveTitle"></div>
+            <button class="danger tiny" onclick="ttStop()">⏹ Стоп</button>
           </div>
-          <div>
-            <label style="margin-bottom:4px">Фон</label>
-            <select id="ttSubsBg" style="width:100%">
-              <option value="none" selected>нет (только обводка)</option>
-              <option value="shadow">тень</option>
-              <option value="dark_box">тёмный box (50%)</option>
-              <option value="solid_box">solid чёрный box</option>
-            </select>
-          </div>
-          <div>
-            <label style="margin-bottom:4px">Позиция</label>
-            <select id="ttSubsPosition" style="width:100%">
-              <option value="bottom" selected>внизу</option>
-              <option value="top">сверху</option>
-              <option value="center">по центру</option>
-            </select>
-          </div>
+          <div class="bar-track"><div id="ttActiveBar" class="bar-fill"></div></div>
+          <div id="ttActiveStats" class="active-stats"></div>
         </div>
       </div>
 
-      <div style="display:flex; gap:10px; margin-top:18px">
-        <button id="ttStartBtn" onclick="ttStart()">▶ Скачать</button>
-      </div>
-
-      <div id="ttActiveJob" style="display:none; margin-top:18px; padding:12px; background:#0a0b0e; border:1px solid var(--accent); border-radius:6px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-          <div id="ttActiveTitle" style="color:#fff; font-weight:600; font-size:14px"></div>
-          <button class="danger tiny" onclick="ttStop()">⏹ Стоп</button>
-        </div>
-        <div style="height:6px; background:#171a20; border-radius:3px; overflow:hidden; margin-bottom:6px">
-          <div id="ttActiveBar" style="height:100%; background:var(--accent); width:0%; transition:width .3s"></div>
-        </div>
-        <div id="ttActiveStats" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--muted)"></div>
-      </div>
-
-      <div style="margin-top:24px">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-          <h3 style="font-size:14px; margin:0">Скачанные</h3>
-          <button class="ghost tiny" onclick="ttRefreshList()">Обновить</button>
+      <div class="files-section">
+        <div class="files-head">
+          <div class="files-title">Скачанные</div>
+          <div style="display:flex; gap:8px">
+            <button class="ghost tiny" onclick="ttRefreshList()">Обновить</button>
+            <button class="danger tiny" onclick="ttDeleteAll()">🗑 Удалить все</button>
+          </div>
         </div>
         <div id="ttList"></div>
       </div>
     </div>
-  </div>
+
+    <!-- ============ UPLOAD TAB ============ -->
+    <div id="tab-upload" class="tab-page" style="display:none">
+      <div class="page-head">
+        <h1 class="page-title">📤 Загрузить</h1>
+        <div class="page-sub">Залей свой mp4 / mov / mkv → Whisper транскрибирует речь → ffmpeg вшивает субтитры в кадр.</div>
+      </div>
+
+      <div class="card">
+        <div class="field">
+          <label>Файл видео</label>
+          <div id="upDropzone" class="dropzone" onclick="$('#upFile').click()">
+            <div class="emoji">📤</div>
+            <div class="big-text">Перетащи файл сюда</div>
+            <div class="small-text">или кликни — mp4 / mov / mkv / webm / avi</div>
+            <input id="upFile" type="file"
+                   accept="video/*,.mp4,.mov,.mkv,.webm,.avi,.m4v"
+                   style="display:none">
+          </div>
+        </div>
+
+        <div class="field">
+          <label style="display:inline-flex; align-items:center; gap:8px; font-weight:400">
+            <input type="checkbox" id="upBurnSubs" onchange="upBurnChange()">
+            <span>🎬 <strong>вшить субтитры в кадр</strong> <span class="help">— иначе только сгенерирует .vtt сбоку</span></span>
+          </label>
+
+          <div id="upSubsStyle" style="display:none; margin-top:12px; padding:14px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+            <div class="grid-2">
+              <div><label>Размер</label><select id="upSubsSize"><option value="small">small (2.5%)</option><option value="medium" selected>medium (3.5%)</option><option value="large">large (4.5%)</option><option value="huge">huge (6%)</option></select></div>
+              <div><label>Цвет</label><select id="upSubsColor"><option value="white" selected>⚪ белый</option><option value="yellow">🟡 жёлтый</option><option value="red">🔴 красный</option><option value="green">🟢 зелёный</option><option value="cyan">🔵 cyan</option><option value="black">⚫ чёрный</option></select></div>
+              <div><label>Фон</label><select id="upSubsBg"><option value="none" selected>нет</option><option value="shadow">тень</option><option value="dark_box">тёмный box</option><option value="solid_box">solid чёрный box</option></select></div>
+              <div><label>Позиция</label><select id="upSubsPosition"><option value="bottom" selected>внизу</option><option value="top">сверху</option><option value="center">по центру</option></select></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button id="upStartBtn" class="big" onclick="upStart()">▶ Обработать</button>
+        </div>
+
+        <div id="upActiveJob" class="active-job" style="display:none">
+          <div class="active-row">
+            <div class="active-title" id="upActiveTitle"></div>
+            <button class="danger tiny" onclick="upStop()">⏹ Стоп</button>
+          </div>
+          <div class="bar-track"><div id="upActiveBar" class="bar-fill"></div></div>
+          <div id="upActiveStats" class="active-stats"></div>
+        </div>
+      </div>
+
+      <div class="files-section">
+        <div class="files-head">
+          <div class="files-title">Обработанные</div>
+          <div style="display:flex; gap:8px">
+            <button class="ghost tiny" onclick="upRefreshList()">Обновить</button>
+            <button class="danger tiny" onclick="upDeleteAll()">🗑 Удалить все</button>
+          </div>
+        </div>
+        <div id="upList"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
 
 <script>
 const $ = s => document.querySelector(s);
 const ALL = (s) => document.querySelectorAll(s);
-let JOB = null;
-let PICKED = new Set();
-let HOOK_STYLE = "auto";
-let OFFSETS = {};  // {idx: shift_sec}
-let CANDS_CACHE = [];
-let RANGE_OFFSET = 0;  // state.range_start_t — used to display stream-absolute times
-
 function switchTab(t) {
   ALL(".tab").forEach(el => el.classList.toggle("active", el.dataset.tab === t));
-  ALL("[id^=tab-]").forEach(el => el.style.display = "none");
+  ALL(".tab-page").forEach(el => el.style.display = "none");
   $("#tab-" + t).style.display = "block";
-}
-
-function setIntent(v) {
-  $("#intent").value = v;
-  // Intent text changed → discard any previous preview so user re-runs it
-  KW_LIST = null;
-  $("#kwPreview").style.display = "none";
-}
-
-let KW_LIST = null;  // null = not previewed yet; [] = previewed empty; [...] = edited
-
-function kwResetIfChanged() {
-  KW_LIST = null;
-  $("#kwPreview").style.display = "none";
-}
-
-function kwRenderChips() {
-  const root = $("#kwChips");
-  if (!KW_LIST || !KW_LIST.length) {
-    root.innerHTML = "<span class='tag' style='margin:0'>пусто</span>";
-    return;
-  }
-  root.innerHTML = KW_LIST.map((kw, i) =>
-    `<span class="tpl-chip" onclick="kwRemove(${i})" title="клик чтобы удалить">${esc(kw)} <span class="x">×</span></span>`
-  ).join("");
-}
-function kwRemove(i) {
-  if (!KW_LIST) return;
-  KW_LIST.splice(i, 1);
-  kwRenderChips();
-}
-function kwAdd() {
-  const inp = $("#kwAddInput");
-  const v = inp.value.trim().toLowerCase();
-  if (!v) return;
-  if (!KW_LIST) KW_LIST = [];
-  if (!KW_LIST.includes(v)) KW_LIST.push(v);
-  inp.value = "";
-  kwRenderChips();
-}
-
-async function previewIntent() {
-  const intent = $("#intent").value.trim();
-  if (!intent) { alert("Сначала впиши что искать"); return; }
-  try {
-    const r = await fetch("/api/parse-intent", {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({intent, strict_intent: $("#optStrict").checked})
-    });
-    const j = await r.json();
-    KW_LIST = (j.keywords || []).slice();
-    $("#kwPreview").style.display = "block";
-    kwRenderChips();
-    const w = `Веса: heatmap=${(j.heatmap_weight ?? 1).toFixed(1)} · audio=${(j.audio_weight ?? 1).toFixed(1)} · captions=${(j.captions_weight ?? 1).toFixed(1)} · keyword_bonus=${(j.keyword_weight ?? 2).toFixed(1)}`;
-    $("#kwWeightsHint").textContent = w;
-  } catch (e) {
-    alert("Не получилось разобрать: " + e.message);
-  }
-}
-
-function onOverrideWeightsToggle() {
-  $("#weightsBox").style.display = $("#optOverrideWeights").checked ? "block" : "none";
-}
-function onWeightInput() {
-  $("#wHeatVal").textContent  = parseFloat($("#wHeat").value).toFixed(1);
-  $("#wAudioVal").textContent = parseFloat($("#wAudio").value).toFixed(1);
-  $("#wCaptVal").textContent  = parseFloat($("#wCapt").value).toFixed(1);
-  $("#wKwVal").textContent    = parseFloat($("#wKw").value).toFixed(1);
-}
-function applyWeightPreset(p) {
-  $("#optOverrideWeights").checked = true;
-  onOverrideWeightsToggle();
-  const presets = {
-    heatmap:  { heat:1.0, audio:0,   capt:0,   kw:2.0 },
-    loudness: { heat:0,   audio:1.0, capt:0,   kw:2.0 },
-    captions: { heat:0,   audio:0,   capt:1.0, kw:3.0 },
-    balanced: { heat:1.0, audio:1.0, capt:1.0, kw:2.0 },
-  };
-  const v = presets[p]; if (!v) return;
-  $("#wHeat").value  = v.heat;
-  $("#wAudio").value = v.audio;
-  $("#wCapt").value  = v.capt;
-  $("#wKw").value    = v.kw;
-  onWeightInput();
-}
-
-function onFormatChange() {
-  const v = $("#optFormat").value;
-  $("#optFormatCustom").style.display = v === "custom" ? "inline-block" : "none";
-}
-
-function pickHook(s) {
-  HOOK_STYLE = s;
-  ALL(".hook-style").forEach(el => el.classList.toggle("picked", el.dataset.style === s));
-}
-
-function toggleAdv() {
-  $("#advToggle").classList.toggle("open");
-  $("#advContent").classList.toggle("open");
-}
-
-function setStep(n, doneList=[]) {
-  for (let i = 1; i <= 4; i++) {
-    const el = $("#step" + i);
-    el.classList.toggle("active", i === n);
-    el.classList.toggle("done", doneList.includes(i));
-  }
-}
-
-let TICK_TIMER = null;
-let LAST_JOB_DATA = null;
-
-function setStatus(stage, detail, kind="run", jobData=null) {
-  LAST_JOB_DATA = jobData;
-  const el = $("#status");
-  el.className = "status " + kind;
-  renderStatus(stage, detail);
-  if (TICK_TIMER) { clearInterval(TICK_TIMER); TICK_TIMER = null; }
-  if (kind === "run" && jobData && jobData.started_at) {
-    TICK_TIMER = setInterval(() => renderStatus(stage, detail), 1000);
-  }
-}
-
-const ANALYZE_PHASES = [
-  {id:"meta",     label:"Метадата YouTube (yt-dlp -J)", test:m => /fetching YouTube metadata|yt-dlp -J/i.test(m)},
-  {id:"intent",   label:"Разбор запроса (Claude)",      test:m => /^intent/i.test(m)},
-  {id:"captions", label:"Captions / субтитры",          test:m => /^captions:|no captions/i.test(m)},
-  {id:"download", label:"Скачивание аудио",             test:m => /downloading.*audio|^audio download:/i.test(m)},
-  {id:"extract",  label:"Извлечение mp3",               test:m => /^audio:\s*(extracting|ffmpeg)/i.test(m)},
-  {id:"loudness", label:"Громкость EBU R128",           test:m => /scanning audio loudness|^loudness:/i.test(m)},
-  {id:"whisper",  label:"Whisper fallback",             test:m => /^whisper:|window\s+\d+\/\d+/i.test(m)},
-  {id:"picking",  label:"Выбор моментов",               test:m => /picking top candidates/i.test(m)},
-  {id:"summary",  label:"Описания моментов (Claude)",   test:m => /generating candidate summaries/i.test(m)},
-];
-const RENDER_PHASES = [
-  {id:"clip_dl", label:"Скачивание кусков видео", test:m => /clip \d+: downloading/i.test(m)},
-  {id:"hook",    label:"Hook-overlay",            test:m => /clip \d+: hook/i.test(m)},
-  {id:"encode",  label:"Энкодинг клипов",         test:m => /clip \d+: encoding/i.test(m)},
-];
-
-function classifyLog(msg, phases) {
-  for (const ph of phases) if (ph.test(msg)) return ph.id;
-  return null;
-}
-
-function extractSubProgress(phaseId, lastMsg, logArr, phaseStart) {
-  const bar = (pct, text) => `<div class="ph-sub"><span class="ph-sub-text">${esc(text)}</span><div class="ph-bar"><div class="ph-bar-fill" style="width:${pct}%"></div></div></div>`;
-  if (phaseId === "whisper") {
-    let lastN = 0, lastM = 0;
-    for (const e of logArr) {
-      const m = e.msg.match(/window\s+(\d+)\/(\d+)/i);
-      if (m) { lastN = +m[1]; lastM = +m[2]; }
-    }
-    if (lastM > 0) {
-      const pct = Math.round(100 * lastN / lastM);
-      const now = Math.floor(Date.now()/1000);
-      const elapsed = Math.max(1, now - phaseStart);
-      const eta = lastN > 0 ? Math.round(elapsed * (lastM - lastN) / lastN) : 0;
-      const etaStr = (eta > 0 && lastN < lastM) ? ` · ETA ~${fmtElapsed(eta)}` : "";
-      return bar(pct, `${lastN} / ${lastM} чанков · ${pct}%${etaStr}`);
-    }
-  }
-  if (phaseId === "download") {
-    const m = lastMsg.match(/(\d+(?:\.\d+)?)%/);
-    if (m) {
-      const pct = Math.min(100, Math.round(parseFloat(m[1])));
-      const speed = (lastMsg.match(/(\d+(?:\.\d+)?\s*(?:KiB|MiB|GiB)\/s)/i) || [])[1] || "";
-      return bar(pct, `${pct}%${speed ? " · " + speed : ""}`);
-    }
-  }
-  if (phaseId === "loudness") {
-    const m = lastMsg.match(/loudness:\s*(\d+)%/i);
-    if (m) { const pct = +m[1]; return bar(pct, `${pct}%`); }
-  }
-  return "";
-}
-
-function buildPhaseView(j, phases) {
-  const phaseTimes = {};
-  for (const entry of (j.log || [])) {
-    const id = classifyLog(entry.msg, phases);
-    if (!id) continue;
-    if (!phaseTimes[id]) phaseTimes[id] = {first: entry.t, last: entry.t, lastMsg: entry.msg};
-    else { phaseTimes[id].last = entry.t; phaseTimes[id].lastMsg = entry.msg; }
-  }
-  let lastSeenIdx = -1;
-  for (let i = 0; i < phases.length; i++)
-    if (phaseTimes[phases[i].id]) lastSeenIdx = i;
-  const isReady = j.status === "ready" || j.status === "rendered";
-  const now = Math.floor(Date.now()/1000);
-  return phases.map((ph, i) => {
-    const t = phaseTimes[ph.id];
-    let state = "pending", elapsedStr = "", subHtml = "";
-    if (t) {
-      if (isReady || i < lastSeenIdx) {
-        state = "done";
-        const dur = Math.max(0, t.last - t.first);
-        if (dur > 0) elapsedStr = fmtElapsed(dur);
-      } else {
-        state = "active";
-        elapsedStr = fmtElapsed(Math.max(0, now - t.first));
-        subHtml = extractSubProgress(ph.id, t.lastMsg, j.log || [], t.first);
-      }
-    } else if (isReady || i < lastSeenIdx) {
-      // No log entry but the pipeline already moved past this phase →
-      // it ran from cache (chat.json / audio_z.json / etc. were on disk).
-      state = "done"; elapsedStr = "(кэш)";
-    }
-    const icon = state === "done" ? "✓" : (state === "active" ? "◉" : "·");
-    return `<div class="phase ${state}"><div class="ph-row"><span class="ph-icon">${icon}</span><span class="ph-label">${esc(ph.label)}</span><span class="ph-time">${esc(elapsedStr)}</span></div>${subHtml}</div>`;
-  }).join("");
-}
-
-function renderStatus(stage, detail) {
-  const el = $("#status");
-  const j = LAST_JOB_DATA || {};
-  let elapsedHtml = "";
-  if (j.started_at) {
-    const elapsed = Math.max(0, Math.floor(Date.now()/1000) - j.started_at);
-    elapsedHtml = `<span class="elapsed">⏱ ${fmtElapsed(elapsed)}</span>`;
-  }
-  const isAnalyze = j.status === "analyzing";
-  const isRender = j.status === "rendering";
-  let body = "";
-  if ((isAnalyze || isRender) && j.log && j.log.length) {
-    const phases = isRender ? RENDER_PHASES : ANALYZE_PHASES;
-    body = `<div class="phases">${buildPhaseView(j, phases)}</div>`;
-  } else if (detail) {
-    body = `<div class="detail">${esc(detail)}</div>`;
-  }
-  let logHtml = "";
-  if (j.log && j.log.length) {
-    const tail = j.log.slice(-15);
-    logHtml = `<details class="raw-log"><summary>лог (${j.log.length} строк)</summary><div class="loglist">` +
-      tail.map(l => {
-        const dt = j.started_at ? Math.max(0, l.t - j.started_at) : 0;
-        return `<div class="ll"><span class="ts">+${fmtElapsed(dt)}</span>${esc(l.msg)}</div>`;
-      }).join("") + `</div></details>`;
-  }
-  el.innerHTML = `<div class="stage"><span>${esc(stage)}</span>${elapsedHtml}</div>${body}${logHtml}`;
-}
-
-function fmtElapsed(s) {
-  if (s < 60) return s + "с";
-  const m = Math.floor(s/60), x = s%60;
-  if (m < 60) return `${m}м ${String(x).padStart(2,"0")}с`;
-  const h = Math.floor(m/60); return `${h}ч ${String(m%60).padStart(2,"0")}м`;
 }
 
 function fmt(s) {
@@ -995,15 +815,161 @@ function fmt(s) {
   return [h,m,x].map(n => String(n).padStart(2,"0")).join(":");
 }
 
-// Crop preview slider
-$("#cropOffset").addEventListener("input", e => {
-  const v = parseFloat(e.target.value);
-  $("#cropVal").textContent = v.toFixed(2);
-  // overlay sits within 160px frame; 9:16 strip is ~50.6px wide
-  const slack = 160 - 50.6;
-  const x = slack * (0.5 + v);
-  $("#cropOverlay").style.left = x + "px";
-});
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function confirmModal(message, okLabel="Удалить") {
+  return new Promise(resolve => {
+    const m = $("#confirmModal");
+    $("#confirmText").textContent = message;
+    const ok = $("#confirmOk"), cancel = $("#confirmCancel");
+    ok.textContent = okLabel;
+    const close = (val) => {
+      m.classList.remove("open");
+      ok.onclick = null; cancel.onclick = null; m.onclick = null;
+      document.removeEventListener("keydown", onKey);
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(false);
+      else if (e.key === "Enter") close(true);
+    };
+    ok.onclick = () => close(true);
+    cancel.onclick = () => close(false);
+    m.onclick = (e) => { if (e.target === m) close(false); };
+    document.addEventListener("keydown", onKey);
+    m.classList.add("open");
+    setTimeout(() => ok.focus(), 50);
+  });
+}
+
+function parseTime(s) {
+  if (s == null) return null;
+  s = String(s).trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return parseInt(s);
+  const parts = s.split(":").map(p => parseInt(p) || 0);
+  if (parts.length === 2) return parts[0]*60 + parts[1];
+  if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+  return null;
+}
+
+// Toast helper — slides notifications in from bottom-right. Returns the
+// element so callers can update or auto-dismiss. Type controls the
+// left-border accent color.
+function toast(title, sub="", type="", autoMs=4000) {
+  const root = $("#toasts");
+  const el = document.createElement("div");
+  el.className = "toast " + (type || "");
+  el.innerHTML = `<div class="toast-title">${esc(title)}</div>` +
+                 (sub ? `<div class="toast-sub">${esc(sub)}</div>` : "");
+  root.appendChild(el);
+  if (autoMs > 0) setTimeout(() => el.remove(), autoMs);
+  return el;
+}
+
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B","KiB","MiB","GiB","TiB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length-1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 ? 0 : 1) + " " + u[i];
+}
+
+// Reveal a media file in the OS File Explorer. Server hits a native
+// `explorer /select,<path>` (Windows) / `open -R` (macOS) / `xdg-open
+// <parent>` (Linux). Server resolves the URL → disk path with the same
+// path-traversal guard the thumbnail endpoint uses.
+async function revealFile(url) {
+  try {
+    const r = await fetch("/api/reveal?url=" + encodeURIComponent(url),
+                          {method: "POST"});
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      toast("Не открылось", j.detail || "ошибка", "err");
+    }
+  } catch (e) { toast("Не открылось", e.message, "err"); }
+}
+
+// Bulk-delete all entries in a list. `ns` is the API namespace
+// (download / upload / insta / tiktok). One confirm dialog with the
+// count, then sequential DELETEs (parallel would race the FS).
+async function deleteAllIn(ns, label, onRefresh) {
+  const r = await fetch(`/api/${ns}/list`);
+  if (!r.ok) { toast("Не получилось", "list", "err"); return; }
+  const j = await r.json();
+  const items = j.jobs || [];
+  if (!items.length) { toast("Уже пусто"); return; }
+  if (!await confirmModal(
+        `Удалить ВСЕ ${items.length} ${label}? Файлы исчезнут с диска.`,
+        "Удалить всё")) return;
+  let ok = 0, fail = 0;
+  for (const it of items) {
+    try {
+      const rr = await fetch(`/api/${ns}/${encodeURIComponent(it.id)}`,
+                              {method: "DELETE"});
+      if (rr.ok) ok++; else fail++;
+    } catch(e) { fail++; }
+  }
+  toast(`Удалено ${ok}`, fail ? `ошибок: ${fail}` : "", fail ? "warn" : "good");
+  await onRefresh();
+}
+
+const dlDeleteAll = () => deleteAllIn("download", "файла(ов)", dlRefreshList);
+const upDeleteAll = () => deleteAllIn("upload",   "загрузки(ок)", upRefreshList);
+const igDeleteAll = () => deleteAllIn("insta",    "reel(ов)",     igRefreshList);
+const ttDeleteAll = () => deleteAllIn("tiktok",   "видео(сов)",   ttRefreshList);
+
+// Shared file-card renderer — used by all four list views so they get
+// the same look (thumbnail + name + buttons) and bug fixes propagate.
+// `source` is "youtube" | "insta" | "tiktok" | "upload" — drives Idea
+// path resolution + delete handler.
+function renderFileCard(item, source, onDelete) {
+  const sizeStr = item.file_size_b ? fmtBytes(item.file_size_b) : "";
+  const date = item.finished_at
+    ? new Date(item.finished_at*1000).toLocaleString("ru")
+    : (item.created_at ? new Date(item.created_at*1000).toLocaleString("ru") : "");
+  const isActive = ["downloading","transcoding","reformatting","transcribing","burning","queued"].includes(item.status);
+  const statusBadge = item.status === "done" ? `<span style="color:var(--good)">✓ done</span>`
+    : isActive ? `<span style="color:var(--accent)">${esc(item.status)} ${item.progress_pct ? item.progress_pct.toFixed(0)+'%' : ''}</span>`
+    : item.status === "failed" ? `<span style="color:var(--err)">✗ failed</span>`
+    : `<span style="color:var(--muted)">${esc(item.status)}</span>`;
+  // Idea button needs a source-specific `name` — for upload it's
+  // <run_id>/<filename>, otherwise just <filename>.
+  let ideaName = null;
+  if (item.file_url && item.file_name) {
+    if (source === "upload" && item.run_id) ideaName = item.run_id + "/" + item.file_name;
+    else if (source !== "upload") ideaName = item.file_name;
+  }
+  const ideaBtn = ideaName
+    ? `<button class="ghost tiny ${item.has_idea ? 'btn-idea-on' : ''}" onclick='ideaOpen(${JSON.stringify(source)}, ${JSON.stringify(ideaName)}, ${JSON.stringify(item.title || item.file_name)})'>${item.has_idea ? "🧠 Идея ✓" : "🧠 Идея"}</button>`
+    : "";
+  const dlBtn = item.file_url
+    ? `<button class="ghost tiny" onclick='revealFile(${JSON.stringify(item.file_url)})'>📂 Открыть папку</button>`
+    : "";
+  const thumb = item.file_url
+    ? `<div class="thumb"><img src="/api/thumb?url=${encodeURIComponent(item.file_url)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'🎬'}))"></div>`
+    : `<div class="thumb">🎬</div>`;
+  return `
+    <div class="file-card">
+      ${thumb}
+      <div class="meta">
+        <div class="name">${esc(item.title || item.file_name || item.url || "?")}</div>
+        <div class="sub">${statusBadge}${sizeStr ? " · " + sizeStr : ""}${date ? " · " + date : ""}</div>
+      </div>
+      <div class="actions">
+        ${ideaBtn}
+        ${dlBtn}
+        <button class="danger tiny" onclick="(${onDelete})('${esc(item.id)}')">×</button>
+      </div>
+    </div>`;
+}
+
+function emptyState(text="пусто") {
+  return `<div class="empty-state"><div class="emoji">📭</div>${esc(text)}</div>`;
+}
 
 // ---------- Download tab ----------
 let DL_TIMER = null;
@@ -1011,14 +977,17 @@ let DL_ACTIVE_ID = null;
 
 function dlOnTabOpen() {
   dlRefreshList();
-  // If there's an active download, reconnect to it
   dlPickActiveFromList();
 }
+function dlAspectChange() {
+  const v = $("#dlAspect").value;
+  $("#dlAspectCustom").style.display = v === "custom" ? "inline-block" : "none";
+}
+
 function dlAudioOnlyChange() {
   const on = $("#dlAudioOnly").checked;
   $("#dlAudioFormat").disabled = !on;
   $("#dlQuality").disabled = on;
-  // audio-only kills both subs flags entirely — there's no video to burn into
   if (on) {
     $("#dlSubs").checked = false;
     $("#dlBurnSubs").checked = false;
@@ -1029,21 +998,17 @@ function dlAudioOnlyChange() {
 function dlSubsChange() {
   const subsOn = $("#dlSubs").checked && !$("#dlAudioOnly").checked;
   $("#dlBurnSubs").disabled = !subsOn;
-  if (!subsOn) {
-    $("#dlBurnSubs").checked = false;
-  }
+  if (!subsOn) $("#dlBurnSubs").checked = false;
   dlBurnChange();
 }
 function dlBurnChange() {
-  // Show the style picker only when burn is actually on — pointless to
-  // configure styles for an external .vtt file.
   const burnOn = $("#dlBurnSubs").checked && !$("#dlBurnSubs").disabled;
   $("#dlSubsStyle").style.display = burnOn ? "block" : "none";
 }
 
 async function dlStart() {
   const url = $("#dlUrl").value.trim();
-  if (!url) { alert("Укажи URL"); return; }
+  if (!url) { toast("Укажи URL", "", "err"); return; }
   const startT = parseTime($("#dlRangeStart").value.trim());
   const endRaw = $("#dlRangeEnd").value.trim();
   const endT = endRaw ? parseTime(endRaw) : null;
@@ -1060,6 +1025,12 @@ async function dlStart() {
     subs_position:  $("#dlSubsPosition").value,
     start_t:        startT || null,
     end_t:          endT,
+    aspect:         (function(){
+      const v = $("#dlAspect").value;
+      return v === "custom"
+        ? ($("#dlAspectCustom").value.trim() || "source")
+        : v;
+    })(),
   };
   $("#dlStartBtn").disabled = true;
   try {
@@ -1070,10 +1041,11 @@ async function dlStart() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || "error");
     DL_ACTIVE_ID = j.id;
-    $("#dlActiveBar").style.background = "var(--accent)";  // reset color
+    $("#dlActiveBar").style.background = "var(--accent)";
     dlPollStart();
+    toast("Скачивание запущено", url.slice(0, 60));
   } catch (e) {
-    alert("Не получилось: " + e.message);
+    toast("Не получилось", e.message, "err");
   } finally {
     $("#dlStartBtn").disabled = false;
   }
@@ -1081,10 +1053,7 @@ async function dlStart() {
 
 async function dlStop() {
   if (!DL_ACTIVE_ID) return;
-  try {
-    await fetch(`/api/download/stop/${encodeURIComponent(DL_ACTIVE_ID)}`,
-                {method:"POST"});
-  } catch(e) {}
+  try { await fetch(`/api/download/stop/${encodeURIComponent(DL_ACTIVE_ID)}`, {method:"POST"}); } catch(e) {}
   await dlTick();
 }
 
@@ -1093,9 +1062,7 @@ function dlPollStart() {
   DL_TIMER = setInterval(dlTick, 1000);
   dlTick();
 }
-function dlPollStop() {
-  if (DL_TIMER) { clearInterval(DL_TIMER); DL_TIMER = null; }
-}
+function dlPollStop() { if (DL_TIMER) { clearInterval(DL_TIMER); DL_TIMER = null; } }
 
 async function dlTick() {
   if (!DL_ACTIVE_ID) { dlPollStop(); return; }
@@ -1104,12 +1071,10 @@ async function dlTick() {
     if (!r.ok) { dlPollStop(); $("#dlActiveJob").style.display = "none"; return; }
     const j = await r.json();
     dlRenderActive(j);
-    // transcribing / burning are post-download phases — keep polling, don't
-    // treat them as terminal.
     if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
-      // Final tick — pull list, then stop polling
       await dlRefreshList();
-      // Keep the active panel visible briefly so user sees the result
+      if (j.status === "done") toast("Готово", j.title || j.file_name || "", "good");
+      else if (j.status === "failed") toast("Ошибка", j.error || "", "err");
       setTimeout(() => {
         if (DL_ACTIVE_ID === j.id) {
           $("#dlActiveJob").style.display = "none";
@@ -1118,9 +1083,7 @@ async function dlTick() {
       }, 4000);
       dlPollStop();
     }
-  } catch (e) {
-    console.warn("dlTick failed:", e);
-  }
+  } catch (e) { console.warn("dlTick failed:", e); }
 }
 
 function dlRenderActive(j) {
@@ -1132,25 +1095,27 @@ function dlRenderActive(j) {
     stats = `${(j.progress_pct||0).toFixed(1)}% of ${j.size_total||"?"}`;
     if (j.speed) stats += ` · ${j.speed}`;
     if (j.eta) stats += ` · ETA ${j.eta}`;
+  } else if (j.status === "reformatting") {
+    stats = `🔁 ${j.phase_msg || "конвертирую формат"} (re-encoding)`;
+    $("#dlActiveBar").style.background = "var(--warn)";
+    $("#dlActiveBar").style.width = "100%";
   } else if (j.status === "transcribing") {
-    stats = `🎤 ${j.phase_msg || "генерирую субтитры через Whisper"} · может занять несколько минут`;
-    $("#dlActiveBar").style.background = "#9ad9ff";
+    stats = `🎤 ${j.phase_msg || "Whisper"}`;
+    $("#dlActiveBar").style.background = "var(--info)";
     $("#dlActiveBar").style.width = "100%";
   } else if (j.status === "burning") {
-    stats = `🎬 ${j.phase_msg || "вшиваю субтитры в видео"} (re-encoding)`;
+    stats = `🎬 ${j.phase_msg || "вшиваю субтитры"} (re-encoding)`;
     $("#dlActiveBar").style.background = "var(--warn)";
   } else if (j.status === "done") {
     stats = `✓ готово · ${fmtBytes(j.file_size_b||0)}`;
     $("#dlActiveBar").style.background = "var(--good)";
   } else if (j.status === "failed") {
-    stats = `✗ ошибка: ${j.error || "unknown"}`;
+    stats = `✗ ${j.error || "unknown"}`;
     $("#dlActiveBar").style.background = "var(--err)";
   } else if (j.status === "cancelled") {
     stats = "⏹ отменено";
     $("#dlActiveBar").style.background = "var(--muted)";
-  } else {
-    stats = j.status;
-  }
+  } else stats = j.status;
   $("#dlActiveStats").textContent = stats;
 }
 
@@ -1159,40 +1124,13 @@ async function dlRefreshList() {
     const r = await fetch("/api/download/list");
     const j = await r.json();
     const root = $("#dlList");
-    if (!j.jobs.length) {
-      root.innerHTML = "<div class='tag'>пусто</div>";
-      return;
-    }
-    root.innerHTML = j.jobs.map(item => {
-      const sizeStr = item.file_size_b ? fmtBytes(item.file_size_b) : "";
-      const date = item.finished_at
-        ? new Date(item.finished_at*1000).toLocaleString("ru")
-        : (item.created_at ? new Date(item.created_at*1000).toLocaleString("ru") : "");
-      const isActive = item.status === "downloading" || item.status === "queued";
-      const statusBadge = item.status === "done" ? `<span style="color:var(--good)">✓ done</span>`
-        : isActive ? `<span style="color:var(--accent)">${item.progress_pct||0}%</span>`
-        : item.status === "failed" ? `<span style="color:var(--err)">✗ failed</span>`
-        : `<span style="color:var(--muted)">${esc(item.status)}</span>`;
-      return `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; gap:10px">
-        <div style="flex:1; min-width:0">
-          <div style="color:#e6e8eb; font-weight:500; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(item.title || item.file_name || item.url)}</div>
-          <div style="color:var(--muted); font-size:11px; font-family:ui-monospace,monospace">${statusBadge}${sizeStr ? " · " + sizeStr : ""}${date ? " · " + date : ""}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-shrink:0">
-          ${item.file_url && item.file_name && item.vid ? `<button class="ghost tiny" style="border:1px solid var(--border2); padding:5px 10px; border-radius:4px; color:var(--accent)" onclick='ideaOpen("youtube", ${JSON.stringify(item.vid + "/" + item.file_name)}, ${JSON.stringify(item.title || item.file_name)})'>🧠 Идея</button>` : ""}
-          ${item.file_url ? `<a href="${item.file_url}" download class="ghost tiny" style="text-decoration:none; padding:5px 10px; border:1px solid var(--border2); border-radius:4px; color:var(--accent)">↓ Скачать</a>` : ""}
-          <button class="danger tiny" onclick="dlDelete('${esc(item.id)}')">×</button>
-        </div>
-      </div>`;
-    }).join("");
-  } catch (e) {
-    console.warn("dlRefreshList:", e);
-  }
+    if (!j.jobs.length) { root.innerHTML = emptyState("ничего не скачано"); return; }
+    root.innerHTML = j.jobs.map(it => renderFileCard(it, "youtube", "dlDelete")).join("");
+  } catch (e) { console.warn("dlRefreshList:", e); }
 }
 
 async function dlDelete(jobId) {
-  if (!confirm("Удалить файл с диска?")) return;
+  if (!await confirmModal("Удалить файл с диска?")) return;
   try {
     await fetch(`/api/download/${encodeURIComponent(jobId)}`, {method:"DELETE"});
     await dlRefreshList();
@@ -1200,15 +1138,10 @@ async function dlDelete(jobId) {
 }
 
 function dlPickActiveFromList() {
-  // If a download was started in another tab/window or we just reloaded,
-  // adopt the most recent active job so the progress panel reattaches.
   fetch("/api/download/list").then(r => r.json()).then(j => {
     const active = (j.jobs || []).find(x =>
-      ["downloading", "queued", "transcribing", "burning"].includes(x.status));
-    if (active && !DL_ACTIVE_ID) {
-      DL_ACTIVE_ID = active.id;
-      dlPollStart();
-    }
+      ["downloading", "queued", "transcribing", "burning", "reformatting"].includes(x.status));
+    if (active && !DL_ACTIVE_ID) { DL_ACTIVE_ID = active.id; dlPollStart(); }
   }).catch(() => {});
 }
 
@@ -1216,25 +1149,43 @@ function dlPickActiveFromList() {
 let UP_TIMER = null;
 let UP_ACTIVE_ID = null;
 
-function upOnTabOpen() {
-  upRefreshList();
-  upPickActiveFromList();
-}
+function upOnTabOpen() { upRefreshList(); upPickActiveFromList(); upBindDropzone(); }
 
 function upBurnChange() {
-  // Style picker only matters when burn is on — without burn the user
-  // gets a raw .vtt sidecar, no rendering happens.
   $("#upSubsStyle").style.display = $("#upBurnSubs").checked ? "block" : "none";
 }
 
+function upBindDropzone() {
+  const dz = $("#upDropzone"); if (!dz || dz._bound) return;
+  dz._bound = true;
+  ["dragenter", "dragover"].forEach(ev =>
+    dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach(ev =>
+    dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("drag"); }));
+  dz.addEventListener("drop", e => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const dt = new DataTransfer(); dt.items.add(f);
+    $("#upFile").files = dt.files;
+    upUpdateDropzoneLabel();
+  });
+  $("#upFile").addEventListener("change", upUpdateDropzoneLabel);
+}
+
+function upUpdateDropzoneLabel() {
+  const dz = $("#upDropzone");
+  const f = $("#upFile").files && $("#upFile").files[0];
+  if (!f) { dz.classList.remove("has-file"); return; }
+  dz.classList.add("has-file");
+  dz.querySelector(".big-text").textContent = f.name;
+  dz.querySelector(".small-text").textContent = fmtBytes(f.size) + " — кликни «Обработать»";
+}
+
 async function upStart() {
-  const fileInput = $("#upFile");
-  if (!fileInput.files || !fileInput.files.length) {
-    alert("Выбери видео файл"); return;
-  }
-  const file = fileInput.files[0];
+  const f = $("#upFile").files && $("#upFile").files[0];
+  if (!f) { toast("Выбери видео", "", "err"); return; }
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("file", f);
   fd.append("burn_subs",     $("#upBurnSubs").checked ? "true" : "false");
   fd.append("subs_size",     $("#upSubsSize").value);
   fd.append("subs_color",    $("#upSubsColor").value);
@@ -1243,8 +1194,8 @@ async function upStart() {
 
   $("#upStartBtn").disabled = true;
   $("#upActiveJob").style.display = "block";
-  $("#upActiveTitle").textContent = "Заливка файла на сервер: " + file.name;
-  $("#upActiveStats").textContent = `${fmtBytes(file.size)} → ждём ответа`;
+  $("#upActiveTitle").textContent = "Заливка: " + f.name;
+  $("#upActiveStats").textContent = `${fmtBytes(f.size)} → ждём ответа`;
   $("#upActiveBar").style.background = "var(--accent)";
   $("#upActiveBar").style.width = "0%";
 
@@ -1254,8 +1205,9 @@ async function upStart() {
     if (!r.ok) throw new Error(j.detail || "error");
     UP_ACTIVE_ID = j.id;
     upPollStart();
+    toast("Файл загружен", f.name);
   } catch (e) {
-    alert("Не получилось: " + e.message);
+    toast("Не получилось", e.message, "err");
     $("#upActiveJob").style.display = "none";
   } finally {
     $("#upStartBtn").disabled = false;
@@ -1264,21 +1216,12 @@ async function upStart() {
 
 async function upStop() {
   if (!UP_ACTIVE_ID) return;
-  try {
-    await fetch(`/api/upload/stop/${encodeURIComponent(UP_ACTIVE_ID)}`,
-                {method: "POST"});
-  } catch(e) {}
+  try { await fetch(`/api/upload/stop/${encodeURIComponent(UP_ACTIVE_ID)}`, {method: "POST"}); } catch(e) {}
   await upTick();
 }
 
-function upPollStart() {
-  if (UP_TIMER) clearInterval(UP_TIMER);
-  UP_TIMER = setInterval(upTick, 1000);
-  upTick();
-}
-function upPollStop() {
-  if (UP_TIMER) { clearInterval(UP_TIMER); UP_TIMER = null; }
-}
+function upPollStart() { if (UP_TIMER) clearInterval(UP_TIMER); UP_TIMER = setInterval(upTick, 1000); upTick(); }
+function upPollStop() { if (UP_TIMER) { clearInterval(UP_TIMER); UP_TIMER = null; } }
 
 async function upTick() {
   if (!UP_ACTIVE_ID) { upPollStop(); return; }
@@ -1289,17 +1232,14 @@ async function upTick() {
     upRenderActive(j);
     if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
       await upRefreshList();
+      if (j.status === "done") toast("Готово", j.title || "", "good");
+      else if (j.status === "failed") toast("Ошибка", j.error || "", "err");
       setTimeout(() => {
-        if (UP_ACTIVE_ID === j.id) {
-          $("#upActiveJob").style.display = "none";
-          UP_ACTIVE_ID = null;
-        }
+        if (UP_ACTIVE_ID === j.id) { $("#upActiveJob").style.display = "none"; UP_ACTIVE_ID = null; }
       }, 4000);
       upPollStop();
     }
-  } catch (e) {
-    console.warn("upTick failed:", e);
-  }
+  } catch (e) { console.warn("upTick failed:", e); }
 }
 
 function upRenderActive(j) {
@@ -1307,8 +1247,8 @@ function upRenderActive(j) {
   $("#upActiveTitle").textContent = j.title || j.file_name || "обработка";
   let stats = "";
   if (j.status === "transcribing") {
-    stats = `🎤 ${j.phase_msg || "генерирую субтитры через Whisper"}`;
-    $("#upActiveBar").style.background = "#9ad9ff";
+    stats = `🎤 ${j.phase_msg || "Whisper"}`;
+    $("#upActiveBar").style.background = "var(--info)";
     $("#upActiveBar").style.width = "100%";
   } else if (j.status === "burning") {
     stats = `🎬 ${j.phase_msg || "вшиваю субтитры"} (re-encoding)`;
@@ -1324,9 +1264,7 @@ function upRenderActive(j) {
   } else if (j.status === "cancelled") {
     stats = "⏹ отменено";
     $("#upActiveBar").style.background = "var(--muted)";
-  } else {
-    stats = j.status;
-  }
+  } else stats = j.status;
   $("#upActiveStats").textContent = stats;
 }
 
@@ -1335,38 +1273,13 @@ async function upRefreshList() {
     const r = await fetch("/api/upload/list");
     const j = await r.json();
     const root = $("#upList");
-    if (!j.jobs.length) { root.innerHTML = "<div class='tag'>пусто</div>"; return; }
-    root.innerHTML = j.jobs.map(item => {
-      const sizeStr = item.file_size_b ? fmtBytes(item.file_size_b) : "";
-      const date = item.finished_at
-        ? new Date(item.finished_at*1000).toLocaleString("ru")
-        : (item.created_at ? new Date(item.created_at*1000).toLocaleString("ru") : "");
-      const isActive = ["transcribing","burning","queued"].includes(item.status);
-      const statusBadge = item.status === "done"
-        ? `<span style="color:var(--good)">✓ done</span>`
-        : isActive
-        ? `<span style="color:var(--accent)">${esc(item.status)}</span>`
-        : item.status === "failed"
-        ? `<span style="color:var(--err)">✗ failed</span>`
-        : `<span style="color:var(--muted)">${esc(item.status)}</span>`;
-      return `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; gap:10px">
-        <div style="flex:1; min-width:0">
-          <div style="color:#e6e8eb; font-weight:500; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(item.title || item.file_name || "?")}</div>
-          <div style="color:var(--muted); font-size:11px; font-family:ui-monospace,monospace">${statusBadge}${sizeStr ? " · " + sizeStr : ""}${date ? " · " + date : ""}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-shrink:0">
-          ${item.file_url && item.file_name && item.run_id ? `<button class="ghost tiny" style="border:1px solid var(--border2); padding:5px 10px; border-radius:4px; color:var(--accent)" onclick='ideaOpen("upload", ${JSON.stringify(item.run_id + "/" + item.file_name)}, ${JSON.stringify(item.title || item.file_name)})'>🧠 Идея</button>` : ""}
-          ${item.file_url ? `<a href="${item.file_url}" download class="ghost tiny" style="text-decoration:none; padding:5px 10px; border:1px solid var(--border2); border-radius:4px; color:var(--accent)">↓ Скачать</a>` : ""}
-          <button class="danger tiny" onclick="upDelete('${esc(item.id)}')">×</button>
-        </div>
-      </div>`;
-    }).join("");
+    if (!j.jobs.length) { root.innerHTML = emptyState("ничего не загружено"); return; }
+    root.innerHTML = j.jobs.map(it => renderFileCard(it, "upload", "upDelete")).join("");
   } catch (e) { console.warn("upRefreshList:", e); }
 }
 
 async function upDelete(jobId) {
-  if (!confirm("Удалить видео и субтитры с диска?")) return;
+  if (!await confirmModal("Удалить видео и субтитры с диска?")) return;
   try {
     await fetch(`/api/upload/${encodeURIComponent(jobId)}`, {method: "DELETE"});
     await upRefreshList();
@@ -1377,39 +1290,22 @@ function upPickActiveFromList() {
   fetch("/api/upload/list").then(r => r.json()).then(j => {
     const active = (j.jobs || []).find(x =>
       ["transcribing","burning","queued"].includes(x.status));
-    if (active && !UP_ACTIVE_ID) {
-      UP_ACTIVE_ID = active.id;
-      upPollStart();
-    }
+    if (active && !UP_ACTIVE_ID) { UP_ACTIVE_ID = active.id; upPollStart(); }
   }).catch(() => {});
-}
-
-function fmtBytes(n) {
-  if (!n) return "0 B";
-  const u = ["B","KiB","MiB","GiB","TiB"];
-  let i = 0;
-  while (n >= 1024 && i < u.length-1) { n /= 1024; i++; }
-  return n.toFixed(n >= 100 ? 0 : 1) + " " + u[i];
 }
 
 // =================== INSTAGRAM TAB ===================
 let IG_TIMER = null;
 let IG_ACTIVE_ID = null;
 
-function igOnTabOpen() {
-  igRefreshList();
-  igPickActiveFromList();
-}
+function igOnTabOpen() { igRefreshList(); igPickActiveFromList(); }
 
 function igSubsChange() {
-  // Subtitle generation off → hide both burn checkbox and style picker.
   const on = $("#igSubs").checked;
   $("#igBurnRow").style.display = on ? "block" : "none";
   igBurnChange();
 }
-
 function igBurnChange() {
-  // Style picker only matters when both subs AND burn are enabled.
   const subsOn = $("#igSubs").checked;
   const burnOn = $("#igBurnSubs").checked;
   $("#igSubsStyle").style.display = (subsOn && burnOn) ? "block" : "none";
@@ -1417,7 +1313,7 @@ function igBurnChange() {
 
 async function igStart() {
   const url = $("#igUrl").value.trim();
-  if (!url) { alert("Вставь ссылку на reel"); return; }
+  if (!url) { toast("Вставь ссылку на reel", "", "err"); return; }
   const subs = $("#igSubs").checked;
   const burn = subs && $("#igBurnSubs").checked;
   $("#igStartBtn").disabled = true;
@@ -1441,31 +1337,21 @@ async function igStart() {
     if (!r.ok) throw new Error(j.detail || "error");
     IG_ACTIVE_ID = j.id;
     igPollStart();
+    toast("Скачивание запущено", url.slice(0, 60));
   } catch (e) {
-    alert("Не получилось: " + e.message);
+    toast("Не получилось", e.message, "err");
     $("#igActiveJob").style.display = "none";
-  } finally {
-    $("#igStartBtn").disabled = false;
-  }
+  } finally { $("#igStartBtn").disabled = false; }
 }
 
 async function igStop() {
   if (!IG_ACTIVE_ID) return;
-  try {
-    await fetch(`/api/insta/stop/${encodeURIComponent(IG_ACTIVE_ID)}`,
-                {method: "POST"});
-  } catch(e) {}
+  try { await fetch(`/api/insta/stop/${encodeURIComponent(IG_ACTIVE_ID)}`, {method: "POST"}); } catch(e) {}
   await igTick();
 }
 
-function igPollStart() {
-  if (IG_TIMER) clearInterval(IG_TIMER);
-  IG_TIMER = setInterval(igTick, 1000);
-  igTick();
-}
-function igPollStop() {
-  if (IG_TIMER) { clearInterval(IG_TIMER); IG_TIMER = null; }
-}
+function igPollStart() { if (IG_TIMER) clearInterval(IG_TIMER); IG_TIMER = setInterval(igTick, 1000); igTick(); }
+function igPollStop() { if (IG_TIMER) { clearInterval(IG_TIMER); IG_TIMER = null; } }
 
 async function igTick() {
   if (!IG_ACTIVE_ID) { igPollStop(); return; }
@@ -1476,17 +1362,14 @@ async function igTick() {
     igRenderActive(j);
     if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
       await igRefreshList();
+      if (j.status === "done") toast("Reel готов", j.title || "", "good");
+      else if (j.status === "failed") toast("Ошибка", j.error || "", "err");
       setTimeout(() => {
-        if (IG_ACTIVE_ID === j.id) {
-          $("#igActiveJob").style.display = "none";
-          IG_ACTIVE_ID = null;
-        }
+        if (IG_ACTIVE_ID === j.id) { $("#igActiveJob").style.display = "none"; IG_ACTIVE_ID = null; }
       }, 4000);
       igPollStop();
     }
-  } catch (e) {
-    console.warn("igTick failed:", e);
-  }
+  } catch (e) { console.warn("igTick failed:", e); }
 }
 
 function igRenderActive(j) {
@@ -1495,36 +1378,26 @@ function igRenderActive(j) {
   let stats = "";
   if (j.status === "downloading") {
     const pct = j.progress_pct || 0;
-    stats = `↓ ${pct.toFixed(1)}% of ${j.size_total || "?"}` +
-            (j.speed ? ` at ${j.speed}` : "") +
-            (j.eta ? ` · ETA ${j.eta}` : "");
+    stats = `↓ ${pct.toFixed(1)}% of ${j.size_total || "?"}` + (j.speed ? ` at ${j.speed}` : "");
     $("#igActiveBar").style.background = "var(--accent)";
     $("#igActiveBar").style.width = Math.min(100, pct) + "%";
   } else if (j.status === "transcoding") {
     stats = `🔄 ${j.phase_msg || "перекодирую в h264"}`;
-    $("#igActiveBar").style.background = "var(--warn)";
-    $("#igActiveBar").style.width = "100%";
+    $("#igActiveBar").style.background = "var(--warn)"; $("#igActiveBar").style.width = "100%";
   } else if (j.status === "transcribing") {
     stats = `🎤 ${j.phase_msg || "Whisper"}`;
-    $("#igActiveBar").style.background = "#9ad9ff";
-    $("#igActiveBar").style.width = "100%";
+    $("#igActiveBar").style.background = "var(--info)"; $("#igActiveBar").style.width = "100%";
   } else if (j.status === "burning") {
     stats = `🎬 ${j.phase_msg || "вшиваю субтитры"} (re-encoding)`;
-    $("#igActiveBar").style.background = "var(--warn)";
-    $("#igActiveBar").style.width = "100%";
+    $("#igActiveBar").style.background = "var(--warn)"; $("#igActiveBar").style.width = "100%";
   } else if (j.status === "done") {
     stats = `✓ готово · ${fmtBytes(j.file_size_b||0)}`;
-    $("#igActiveBar").style.background = "var(--good)";
-    $("#igActiveBar").style.width = "100%";
+    $("#igActiveBar").style.background = "var(--good)"; $("#igActiveBar").style.width = "100%";
   } else if (j.status === "failed") {
-    stats = `✗ ${j.error || "unknown"}`;
-    $("#igActiveBar").style.background = "var(--err)";
+    stats = `✗ ${j.error || "unknown"}`; $("#igActiveBar").style.background = "var(--err)";
   } else if (j.status === "cancelled") {
-    stats = "⏹ отменено";
-    $("#igActiveBar").style.background = "var(--muted)";
-  } else {
-    stats = j.status;
-  }
+    stats = "⏹ отменено"; $("#igActiveBar").style.background = "var(--muted)";
+  } else stats = j.status;
   $("#igActiveStats").textContent = stats;
 }
 
@@ -1533,38 +1406,13 @@ async function igRefreshList() {
     const r = await fetch("/api/insta/list");
     const j = await r.json();
     const root = $("#igList");
-    if (!j.jobs.length) { root.innerHTML = "<div class='tag'>пусто</div>"; return; }
-    root.innerHTML = j.jobs.map(item => {
-      const sizeStr = item.file_size_b ? fmtBytes(item.file_size_b) : "";
-      const date = item.finished_at
-        ? new Date(item.finished_at*1000).toLocaleString("ru")
-        : (item.created_at ? new Date(item.created_at*1000).toLocaleString("ru") : "");
-      const isActive = ["downloading","transcoding","transcribing","burning","queued"].includes(item.status);
-      const statusBadge = item.status === "done"
-        ? `<span style="color:var(--good)">✓ done</span>`
-        : isActive
-        ? `<span style="color:var(--accent)">${esc(item.status)}</span>`
-        : item.status === "failed"
-        ? `<span style="color:var(--err)">✗ failed</span>`
-        : `<span style="color:var(--muted)">${esc(item.status)}</span>`;
-      return `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; gap:10px">
-        <div style="flex:1; min-width:0">
-          <div style="color:#e6e8eb; font-weight:500; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(item.title || item.file_name || item.reel_id || "?")}</div>
-          <div style="color:var(--muted); font-size:11px; font-family:ui-monospace,monospace">${statusBadge}${sizeStr ? " · " + sizeStr : ""}${date ? " · " + date : ""}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-shrink:0">
-          ${item.file_url && item.file_name ? `<button class="ghost tiny" style="border:1px solid var(--border2); padding:5px 10px; border-radius:4px; color:var(--accent)" onclick='ideaOpen("insta", ${JSON.stringify(item.file_name)}, ${JSON.stringify(item.title || item.file_name)})'>🧠 Идея</button>` : ""}
-          ${item.file_url ? `<a href="${item.file_url}" download class="ghost tiny" style="text-decoration:none; padding:5px 10px; border:1px solid var(--border2); border-radius:4px; color:var(--accent)">↓ Скачать</a>` : ""}
-          <button class="danger tiny" onclick="igDelete('${esc(item.id)}')">×</button>
-        </div>
-      </div>`;
-    }).join("");
+    if (!j.jobs.length) { root.innerHTML = emptyState("ни одного reel"); return; }
+    root.innerHTML = j.jobs.map(it => renderFileCard(it, "insta", "igDelete")).join("");
   } catch (e) { console.warn("igRefreshList:", e); }
 }
 
 async function igDelete(jobId) {
-  if (!confirm("Удалить reel и субтитры с диска?")) return;
+  if (!await confirmModal("Удалить reel и субтитры с диска?")) return;
   try {
     await fetch(`/api/insta/${encodeURIComponent(jobId)}`, {method: "DELETE"});
     await igRefreshList();
@@ -1574,11 +1422,8 @@ async function igDelete(jobId) {
 function igPickActiveFromList() {
   fetch("/api/insta/list").then(r => r.json()).then(j => {
     const active = (j.jobs || []).find(x =>
-      ["downloading","transcoding","transcribing","burning","queued"].includes(x.status));
-    if (active && !IG_ACTIVE_ID) {
-      IG_ACTIVE_ID = active.id;
-      igPollStart();
-    }
+      ["downloading","transcoding","reformatting","transcribing","burning","queued"].includes(x.status));
+    if (active && !IG_ACTIVE_ID) { IG_ACTIVE_ID = active.id; igPollStart(); }
   }).catch(() => {});
 }
 
@@ -1586,17 +1431,13 @@ function igPickActiveFromList() {
 let TT_TIMER = null;
 let TT_ACTIVE_ID = null;
 
-function ttOnTabOpen() {
-  ttRefreshList();
-  ttPickActiveFromList();
-}
+function ttOnTabOpen() { ttRefreshList(); ttPickActiveFromList(); }
 
 function ttSubsChange() {
   const on = $("#ttSubs").checked;
   $("#ttBurnRow").style.display = on ? "block" : "none";
   ttBurnChange();
 }
-
 function ttBurnChange() {
   const subsOn = $("#ttSubs").checked;
   const burnOn = $("#ttBurnSubs").checked;
@@ -1605,7 +1446,7 @@ function ttBurnChange() {
 
 async function ttStart() {
   const url = $("#ttUrl").value.trim();
-  if (!url) { alert("Вставь ссылку на TikTok видео"); return; }
+  if (!url) { toast("Вставь ссылку на TikTok", "", "err"); return; }
   const subs = $("#ttSubs").checked;
   const burn = subs && $("#ttBurnSubs").checked;
   $("#ttStartBtn").disabled = true;
@@ -1629,31 +1470,21 @@ async function ttStart() {
     if (!r.ok) throw new Error(j.detail || "error");
     TT_ACTIVE_ID = j.id;
     ttPollStart();
+    toast("Скачивание запущено", url.slice(0, 60));
   } catch (e) {
-    alert("Не получилось: " + e.message);
+    toast("Не получилось", e.message, "err");
     $("#ttActiveJob").style.display = "none";
-  } finally {
-    $("#ttStartBtn").disabled = false;
-  }
+  } finally { $("#ttStartBtn").disabled = false; }
 }
 
 async function ttStop() {
   if (!TT_ACTIVE_ID) return;
-  try {
-    await fetch(`/api/tiktok/stop/${encodeURIComponent(TT_ACTIVE_ID)}`,
-                {method: "POST"});
-  } catch(e) {}
+  try { await fetch(`/api/tiktok/stop/${encodeURIComponent(TT_ACTIVE_ID)}`, {method: "POST"}); } catch(e) {}
   await ttTick();
 }
 
-function ttPollStart() {
-  if (TT_TIMER) clearInterval(TT_TIMER);
-  TT_TIMER = setInterval(ttTick, 1000);
-  ttTick();
-}
-function ttPollStop() {
-  if (TT_TIMER) { clearInterval(TT_TIMER); TT_TIMER = null; }
-}
+function ttPollStart() { if (TT_TIMER) clearInterval(TT_TIMER); TT_TIMER = setInterval(ttTick, 1000); ttTick(); }
+function ttPollStop() { if (TT_TIMER) { clearInterval(TT_TIMER); TT_TIMER = null; } }
 
 async function ttTick() {
   if (!TT_ACTIVE_ID) { ttPollStop(); return; }
@@ -1664,17 +1495,14 @@ async function ttTick() {
     ttRenderActive(j);
     if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
       await ttRefreshList();
+      if (j.status === "done") toast("TikTok готов", j.title || "", "good");
+      else if (j.status === "failed") toast("Ошибка", j.error || "", "err");
       setTimeout(() => {
-        if (TT_ACTIVE_ID === j.id) {
-          $("#ttActiveJob").style.display = "none";
-          TT_ACTIVE_ID = null;
-        }
+        if (TT_ACTIVE_ID === j.id) { $("#ttActiveJob").style.display = "none"; TT_ACTIVE_ID = null; }
       }, 4000);
       ttPollStop();
     }
-  } catch (e) {
-    console.warn("ttTick failed:", e);
-  }
+  } catch (e) { console.warn("ttTick failed:", e); }
 }
 
 function ttRenderActive(j) {
@@ -1683,36 +1511,26 @@ function ttRenderActive(j) {
   let stats = "";
   if (j.status === "downloading") {
     const pct = j.progress_pct || 0;
-    stats = `↓ ${pct.toFixed(1)}% of ${j.size_total || "?"}` +
-            (j.speed ? ` at ${j.speed}` : "") +
-            (j.eta ? ` · ETA ${j.eta}` : "");
+    stats = `↓ ${pct.toFixed(1)}% of ${j.size_total || "?"}` + (j.speed ? ` at ${j.speed}` : "");
     $("#ttActiveBar").style.background = "var(--accent)";
     $("#ttActiveBar").style.width = Math.min(100, pct) + "%";
   } else if (j.status === "transcoding") {
-    stats = `🔄 ${j.phase_msg || "перекодирую в h264"}`;
-    $("#ttActiveBar").style.background = "var(--warn)";
-    $("#ttActiveBar").style.width = "100%";
+    stats = `🔄 ${j.phase_msg || "перекодирую"}`;
+    $("#ttActiveBar").style.background = "var(--warn)"; $("#ttActiveBar").style.width = "100%";
   } else if (j.status === "transcribing") {
     stats = `🎤 ${j.phase_msg || "Whisper"}`;
-    $("#ttActiveBar").style.background = "#9ad9ff";
-    $("#ttActiveBar").style.width = "100%";
+    $("#ttActiveBar").style.background = "var(--info)"; $("#ttActiveBar").style.width = "100%";
   } else if (j.status === "burning") {
     stats = `🎬 ${j.phase_msg || "вшиваю субтитры"} (re-encoding)`;
-    $("#ttActiveBar").style.background = "var(--warn)";
-    $("#ttActiveBar").style.width = "100%";
+    $("#ttActiveBar").style.background = "var(--warn)"; $("#ttActiveBar").style.width = "100%";
   } else if (j.status === "done") {
     stats = `✓ готово · ${fmtBytes(j.file_size_b||0)}`;
-    $("#ttActiveBar").style.background = "var(--good)";
-    $("#ttActiveBar").style.width = "100%";
+    $("#ttActiveBar").style.background = "var(--good)"; $("#ttActiveBar").style.width = "100%";
   } else if (j.status === "failed") {
-    stats = `✗ ${j.error || "unknown"}`;
-    $("#ttActiveBar").style.background = "var(--err)";
+    stats = `✗ ${j.error || "unknown"}`; $("#ttActiveBar").style.background = "var(--err)";
   } else if (j.status === "cancelled") {
-    stats = "⏹ отменено";
-    $("#ttActiveBar").style.background = "var(--muted)";
-  } else {
-    stats = j.status;
-  }
+    stats = "⏹ отменено"; $("#ttActiveBar").style.background = "var(--muted)";
+  } else stats = j.status;
   $("#ttActiveStats").textContent = stats;
 }
 
@@ -1721,38 +1539,13 @@ async function ttRefreshList() {
     const r = await fetch("/api/tiktok/list");
     const j = await r.json();
     const root = $("#ttList");
-    if (!j.jobs.length) { root.innerHTML = "<div class='tag'>пусто</div>"; return; }
-    root.innerHTML = j.jobs.map(item => {
-      const sizeStr = item.file_size_b ? fmtBytes(item.file_size_b) : "";
-      const date = item.finished_at
-        ? new Date(item.finished_at*1000).toLocaleString("ru")
-        : (item.created_at ? new Date(item.created_at*1000).toLocaleString("ru") : "");
-      const isActive = ["downloading","transcoding","transcribing","burning","queued"].includes(item.status);
-      const statusBadge = item.status === "done"
-        ? `<span style="color:var(--good)">✓ done</span>`
-        : isActive
-        ? `<span style="color:var(--accent)">${esc(item.status)}</span>`
-        : item.status === "failed"
-        ? `<span style="color:var(--err)">✗ failed</span>`
-        : `<span style="color:var(--muted)">${esc(item.status)}</span>`;
-      return `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; gap:10px">
-        <div style="flex:1; min-width:0">
-          <div style="color:#e6e8eb; font-weight:500; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(item.title || item.file_name || item.video_id || "?")}</div>
-          <div style="color:var(--muted); font-size:11px; font-family:ui-monospace,monospace">${statusBadge}${sizeStr ? " · " + sizeStr : ""}${date ? " · " + date : ""}</div>
-        </div>
-        <div style="display:flex; gap:6px; flex-shrink:0">
-          ${item.file_url && item.file_name ? `<button class="ghost tiny" style="border:1px solid var(--border2); padding:5px 10px; border-radius:4px; color:var(--accent)" onclick='ideaOpen("tiktok", ${JSON.stringify(item.file_name)}, ${JSON.stringify(item.title || item.file_name)})'>🧠 Идея</button>` : ""}
-          ${item.file_url ? `<a href="${item.file_url}" download class="ghost tiny" style="text-decoration:none; padding:5px 10px; border:1px solid var(--border2); border-radius:4px; color:var(--accent)">↓ Скачать</a>` : ""}
-          <button class="danger tiny" onclick="ttDelete('${esc(item.id)}')">×</button>
-        </div>
-      </div>`;
-    }).join("");
+    if (!j.jobs.length) { root.innerHTML = emptyState("ни одного TikTok"); return; }
+    root.innerHTML = j.jobs.map(it => renderFileCard(it, "tiktok", "ttDelete")).join("");
   } catch (e) { console.warn("ttRefreshList:", e); }
 }
 
 async function ttDelete(jobId) {
-  if (!confirm("Удалить видео и субтитры с диска?")) return;
+  if (!await confirmModal("Удалить видео и субтитры с диска?")) return;
   try {
     await fetch(`/api/tiktok/${encodeURIComponent(jobId)}`, {method: "DELETE"});
     await ttRefreshList();
@@ -1762,20 +1555,17 @@ async function ttDelete(jobId) {
 function ttPickActiveFromList() {
   fetch("/api/tiktok/list").then(r => r.json()).then(j => {
     const active = (j.jobs || []).find(x =>
-      ["downloading","transcoding","transcribing","burning","queued"].includes(x.status));
-    if (active && !TT_ACTIVE_ID) {
-      TT_ACTIVE_ID = active.id;
-      ttPollStart();
-    }
+      ["downloading","transcoding","reformatting","transcribing","burning","queued"].includes(x.status));
+    if (active && !TT_ACTIVE_ID) { TT_ACTIVE_ID = active.id; ttPollStart(); }
   }).catch(() => {});
 }
 
 // =================== IDEA MODAL (Gemini) ===================
 let IDEA_TIMER = null;
 let IDEA_JOB_ID = null;
-let IDEA_CTX = null;  // {source, name, title}
+let IDEA_CTX = null;
 
-function ideaOpen(source, name, title) {
+async function ideaOpen(source, name, title) {
   IDEA_CTX = {source, name, title};
   $("#ideaForFile").textContent = title || name;
   $("#ideaResult").style.display = "none";
@@ -1784,22 +1574,42 @@ function ideaOpen(source, name, title) {
   $("#ideaPhase").textContent = "";
   $("#ideaBar").style.width = "0%";
   $("#ideaBar").style.background = "var(--accent)";
-  // Prefill key from sessionStorage so the user types it once per tab
-  // session, not once per click.
   let storedKey = "";
   try { storedKey = sessionStorage.getItem("geminiKey") || ""; } catch(e) {}
   $("#ideaKey").value = storedKey;
   $("#ideaKeyBlock").style.display = "block";
   $("#ideaRunBtn").disabled = false;
-  $("#ideaModal").style.display = "block";
-  setTimeout(() => $("#ideaKey").focus(), 50);
+  $("#ideaModal").classList.add("open");
+  let cached = false;
+  try {
+    const r = await fetch(`/api/idea/cached?source=${encodeURIComponent(source)}&name=${encodeURIComponent(name)}`);
+    if (r.ok) cached = (await r.json()).cached === true;
+  } catch(e) {}
+  if (cached) ideaRunCached();
+  else setTimeout(() => $("#ideaKey").focus(), 50);
+}
+
+async function ideaRunCached() {
+  try {
+    const r = await fetch("/api/idea/start", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name, api_key: "", force: false})
+    });
+    const j = await r.json();
+    if (!r.ok) return;
+    IDEA_JOB_ID = j.id;
+    $("#ideaProgress").style.display = "block";
+    $("#ideaPhase").textContent = "из кэша…";
+    if (IDEA_TIMER) clearInterval(IDEA_TIMER);
+    IDEA_TIMER = setInterval(ideaTick, 500);
+    ideaTick();
+  } catch(e) {}
 }
 
 function ideaClose() {
-  $("#ideaModal").style.display = "none";
+  $("#ideaModal").classList.remove("open");
   if (IDEA_TIMER) { clearInterval(IDEA_TIMER); IDEA_TIMER = null; }
-  IDEA_JOB_ID = null;
-  IDEA_CTX = null;
+  IDEA_JOB_ID = null; IDEA_CTX = null;
 }
 
 function ideaForgetKey() {
@@ -1809,9 +1619,8 @@ function ideaForgetKey() {
 
 async function ideaRun() {
   const key = $("#ideaKey").value.trim();
-  if (!key) { alert("Вставь Gemini API key"); return; }
+  if (!key) { toast("Вставь Gemini API key", "", "err"); return; }
   if (!IDEA_CTX) return;
-  // Persist for this tab session only — wiped on tab close.
   try { sessionStorage.setItem("geminiKey", key); } catch(e) {}
   $("#ideaRunBtn").disabled = true;
   $("#ideaProgress").style.display = "block";
@@ -1821,9 +1630,8 @@ async function ideaRun() {
     const r = await fetch("/api/idea/start", {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
-        source: IDEA_CTX.source,
-        name:   IDEA_CTX.name,
-        api_key: key,
+        source: IDEA_CTX.source, name: IDEA_CTX.name,
+        api_key: key, force: true,
       })
     });
     const j = await r.json();
@@ -1839,6 +1647,56 @@ async function ideaRun() {
   }
 }
 
+async function ideaRefine() {
+  const hintEl = $("#ideaHint");
+  const hint = (hintEl && hintEl.value || "").trim();
+  if (!hint) { hintEl && hintEl.focus(); return; }
+  let key = ($("#ideaKey").value || "").trim();
+  if (!key) { try { key = sessionStorage.getItem("geminiKey") || ""; } catch(e) {} }
+  if (!key) {
+    $("#ideaKeyBlock").style.display = "block";
+    setTimeout(() => $("#ideaKey").focus(), 50);
+    toast("Сначала вставь Gemini API key", "", "err");
+    return;
+  }
+  try { sessionStorage.setItem("geminiKey", key); } catch(e) {}
+  $("#ideaResult").style.display = "none";
+  $("#ideaProgress").style.display = "block";
+  $("#ideaPhase").textContent = "пересчитываю с твоей подсказкой…";
+  $("#ideaBar").style.width = "10%";
+  $("#ideaBar").style.background = "var(--accent)";
+  try {
+    const r = await fetch("/api/idea/start", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name, api_key: key, hint, force: true})
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "error");
+    IDEA_JOB_ID = j.id;
+    if (IDEA_TIMER) clearInterval(IDEA_TIMER);
+    IDEA_TIMER = setInterval(ideaTick, 1500);
+    ideaTick();
+  } catch(e) {
+    $("#ideaPhase").textContent = "✗ " + e.message;
+    $("#ideaBar").style.background = "var(--err)";
+  }
+}
+
+function ideaRegenerate() {
+  const key = ($("#ideaKey").value || "").trim();
+  if (!key) {
+    let stored = "";
+    try { stored = sessionStorage.getItem("geminiKey") || ""; } catch(e) {}
+    if (!stored) {
+      $("#ideaKeyBlock").style.display = "block";
+      setTimeout(() => $("#ideaKey").focus(), 50);
+      return;
+    }
+    $("#ideaKey").value = stored;
+  }
+  ideaRun();
+}
+
 async function ideaTick() {
   if (!IDEA_JOB_ID) return;
   try {
@@ -1848,29 +1706,23 @@ async function ideaTick() {
       clearInterval(IDEA_TIMER); IDEA_TIMER = null; return;
     }
     const j = await r.json();
-    const phaseText = {
-      "queued":      "ожидание",
-      "extracting":  "🎞 кадры",
-      "transcribing":"🎤 транскрипт",
-      "generating":  "🧠 Gemini",
-    }[j.status] || j.status;
+    const phaseText = {"queued":"ожидание","extracting":"🎞 кадры","transcribing":"🎤 транскрипт","generating":"🧠 Gemini"}[j.status] || j.status;
     $("#ideaPhase").textContent = phaseText + (j.phase_msg ? ` · ${j.phase_msg}` : "");
     const pctMap = {"queued":5,"extracting":25,"transcribing":50,"generating":80,"done":100,"failed":100};
     $("#ideaBar").style.width = (pctMap[j.status] || 50) + "%";
     if (j.status === "done") {
       clearInterval(IDEA_TIMER); IDEA_TIMER = null;
       $("#ideaBar").style.background = "var(--good)";
-      ideaRenderResult(j.result);
+      ideaRenderResult(j.result, j.from_cache === true);
       $("#ideaRunBtn").disabled = false;
+      if (j.from_cache) $("#ideaKeyBlock").style.display = "none";
     } else if (j.status === "failed") {
       clearInterval(IDEA_TIMER); IDEA_TIMER = null;
       $("#ideaBar").style.background = "var(--err)";
       $("#ideaPhase").textContent = "✗ " + (j.error || "unknown");
       $("#ideaRunBtn").disabled = false;
     }
-  } catch(e) {
-    console.warn("ideaTick:", e);
-  }
+  } catch(e) { console.warn("ideaTick:", e); }
 }
 
 function ideaCopyText(btn, text) {
@@ -1881,47 +1733,75 @@ function ideaCopyText(btn, text) {
   }).catch(() => alert("Не удалось скопировать"));
 }
 
-function ideaRenderResult(r) {
+function ideaRenderResult(r, fromCache=false) {
   if (!r) return;
   const score = (r.hype_score != null) ? Number(r.hype_score).toFixed(1) : "?";
   const scoreColor = r.hype_score >= 7 ? "var(--good)"
                    : r.hype_score >= 5 ? "var(--warn)" : "var(--err)";
+  const cacheBanner = fromCache
+    ? `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:rgba(96,165,250,.08); border:1px solid rgba(96,165,250,.4); border-radius:var(--radius-sm); margin-bottom:14px; font-size:12.5px">
+         <span style="color:var(--info)">💾 загружено из кэша — этот клип уже анализировали</span>
+         <button class="ghost tiny" onclick="ideaRegenerate()">🔄 пересоздать</button>
+       </div>`
+    : "";
   const block = (label, items) => `
     <div style="margin-bottom:14px">
-      <div style="text-transform:uppercase; letter-spacing:.6px; font-size:10px; color:var(--muted); margin-bottom:6px">${label}</div>
+      <div style="text-transform:uppercase; letter-spacing:.08em; font-size:10px; color:var(--muted); margin-bottom:6px">${label}</div>
       ${items.map(t => `
-        <div style="display:flex; align-items:flex-start; gap:6px; margin-bottom:4px">
-          <div style="flex:1; padding:6px 10px; background:#0a0b0e; border:1px solid var(--border); border-radius:4px; font-size:13px; color:#e6e8eb">${esc(t)}</div>
-          <button class="ghost tiny" style="padding:5px 10px" onclick='ideaCopyText(this, ${JSON.stringify(t)})'>📋</button>
+        <div style="display:flex; align-items:flex-start; gap:6px; margin-bottom:5px">
+          <div style="flex:1; padding:8px 12px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; color:var(--text)">${esc(t)}</div>
+          <button class="ghost tiny" onclick='ideaCopyText(this, ${JSON.stringify(t)})'>📋</button>
         </div>`).join("")}
     </div>`;
   const tagsLine = (r.tags || []).map(t => "#" + t).join(" ");
+  const refineBlock = `
+    <div style="margin-top:16px; padding:14px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+      <label>Подкрутить — куда копать <span class="help">(напр. «больше про reaction», «funnier tone», «короче подписи»)</span></label>
+      <div style="display:flex; gap:8px">
+        <input id="ideaHint" type="text" placeholder="напиши направление и жми пересчитать" style="flex:1">
+        <button onclick="ideaRefine()">🔄 Пересчитать</button>
+      </div>
+    </div>`;
   const html = `
-    <div style="padding:14px; background:#0a0b0e; border:1px solid var(--border); border-radius:6px">
-      <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--border)">
-        <div style="font-size:32px; font-weight:700; color:${scoreColor}; font-family:ui-monospace,monospace">${score}<span style="font-size:14px; color:var(--muted)">/10</span></div>
+    ${cacheBanner}
+    <div style="padding:16px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+      <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border)">
+        <div style="font-size:34px; font-weight:700; color:${scoreColor}; font-family:ui-monospace,monospace">${score}<span style="font-size:14px; color:var(--muted)">/10</span></div>
         <div style="flex:1">
-          <div style="text-transform:uppercase; letter-spacing:.6px; font-size:10px; color:var(--muted); margin-bottom:2px">hype hook</div>
-          <div style="color:#e6e8eb; font-size:13px">${esc(r.hook || "")}</div>
+          <div style="text-transform:uppercase; letter-spacing:.08em; font-size:10px; color:var(--muted); margin-bottom:3px">hype hook</div>
+          <div style="color:var(--text); font-size:13px">${esc(r.hook || "")}</div>
         </div>
       </div>
       ${block("TikTok captions (3)", r.tiktok || [])}
       ${block("Shorts titles (3)", r.shorts || [])}
+      ${r.long_caption ? `
+      <div style="margin-bottom:14px">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
+          <div style="text-transform:uppercase; letter-spacing:.08em; font-size:10px; color:var(--muted)">long caption (Instagram / YouTube description)</div>
+          <button class="ghost tiny" onclick='ideaCopyText(this, ${JSON.stringify(r.long_caption)})'>📋 копировать</button>
+        </div>
+        <div style="padding:12px 14px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; color:var(--text); line-height:1.55; white-space:pre-wrap">${esc(r.long_caption)}</div>
+      </div>` : ""}
       <div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
-          <div style="text-transform:uppercase; letter-spacing:.6px; font-size:10px; color:var(--muted)">tags (15)</div>
+          <div style="text-transform:uppercase; letter-spacing:.08em; font-size:10px; color:var(--muted)">tags (15)</div>
           <button class="ghost tiny" onclick='ideaCopyText(this, ${JSON.stringify(tagsLine)})'>📋 копировать все</button>
         </div>
-        <div style="padding:8px 10px; background:#0a0b0e; border:1px solid var(--border); border-radius:4px; font-size:12px; color:var(--accent); font-family:ui-monospace,monospace; line-height:1.6; word-wrap:break-word">${esc(tagsLine)}</div>
+        <div style="padding:10px 12px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:12.5px; color:var(--accent-2); font-family:ui-monospace,monospace; line-height:1.6; word-wrap:break-word">${esc(tagsLine)}</div>
       </div>
-    </div>`;
+    </div>
+    ${refineBlock}`;
   $("#ideaResult").innerHTML = html;
   $("#ideaResult").style.display = "block";
 }
 
-// Refresh the default-active tab's list on page load so the user sees
-// previously-downloaded files without clicking anything.
-document.addEventListener("DOMContentLoaded", () => { try { dlOnTabOpen(); } catch(e) {} });
+// On page load, refresh every tab's list
+document.addEventListener("DOMContentLoaded", () => {
+  try { dlOnTabOpen(); } catch(e) { console.warn("dlOnTabOpen", e); }
+  try { upOnTabOpen(); } catch(e) { console.warn("upOnTabOpen", e); }
+  try { igOnTabOpen(); } catch(e) { console.warn("igOnTabOpen", e); }
+  try { ttOnTabOpen(); } catch(e) { console.warn("ttOnTabOpen", e); }
+});
 
 </script>
 </body>

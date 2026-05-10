@@ -40,6 +40,7 @@ class DownloadStartReq(BaseModel):
     subs_position: str = "bottom"
     start_t: Optional[int] = None
     end_t: Optional[int] = None
+    aspect: str = "source"   # source / 9:16 / 16:9 / 1:1 / 4:5 / W:H
 
 class InstaStartReq(BaseModel):
     url: str
@@ -62,7 +63,9 @@ class TikTokStartReq(BaseModel):
 class IdeaStartReq(BaseModel):
     source: str   # "youtube" | "upload" | "insta" | "tiktok"
     name: str
-    api_key: str
+    api_key: str = ""    # may be empty when a cache hit is expected
+    force: bool = False  # True = bypass cache and call Gemini fresh
+    hint: str = ""       # optional refinement note → forces fresh call
 
 
 # ---------- YouTube download ----------
@@ -103,9 +106,9 @@ def api_download_delete(job_id: str):
         raise HTTPException(404, "unknown or already deleted")
     return {"deleted": job_id}
 
-@app.get("/downloads/{vid}/{filename:path}")
-def serve_download(vid: str, filename: str):
-    p = dl_mod.DOWNLOADS_ROOT / vid / filename
+@app.get("/downloads/{filename:path}")
+def serve_download(filename: str):
+    p = dl_mod.DOWNLOADS_ROOT / filename
     if not p.exists(): raise HTTPException(404)
     return FileResponse(p, filename=filename)
 
@@ -263,6 +266,100 @@ def serve_tiktok(filename: str):
     return FileResponse(p, filename=filename)
 
 
+# ---------- Reveal in File Explorer ----------
+@app.post("/api/reveal")
+def api_reveal(url: str):
+    """Open the OS file manager focused on the given media file. The
+    `url` is the server-relative serve URL we already hand out (e.g.
+    `/insta/foo.mp4`) — we resolve it back to disk path under one of
+    the known roots, then call the platform-native reveal-in-folder.
+    Pure-cosmetic feature: failures are non-fatal, just return ok=False."""
+    import os, subprocess
+    from urllib.parse import unquote
+    url = unquote(url or "")
+    if not url.startswith("/"):
+        raise HTTPException(400, "url must be absolute path")
+    parts = url.lstrip("/").split("/", 1)
+    if len(parts) < 2:
+        raise HTTPException(400, "bad url")
+    prefix, rest = parts
+    roots = {
+        "downloads": dl_mod.DOWNLOADS_ROOT,
+        "insta":     ig_mod.INSTA_ROOT,
+        "tiktok":    tt_mod.TIKTOK_ROOT,
+        "uploads":   up_mod.UPLOADS_ROOT,
+    }
+    root = roots.get(prefix)
+    if root is None:
+        raise HTTPException(404, "unknown root")
+    media = (root / rest).resolve()
+    try: media.relative_to(root.resolve())
+    except ValueError: raise HTTPException(400, "path escape")
+    if not media.exists():
+        raise HTTPException(404, "media missing")
+    try:
+        if os.name == "nt":
+            # explorer /select,<path> opens the parent folder with the
+            # target file pre-selected. The trailing comma is part of
+            # the syntax — no space allowed between /select and ,.
+            subprocess.Popen(["explorer", f"/select,{media}"])
+        elif os.uname().sysname == "Darwin":
+            subprocess.Popen(["open", "-R", str(media)])
+        else:
+            subprocess.Popen(["xdg-open", str(media.parent)])
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "path": str(media)}
+
+
+# ---------- Thumbnails ----------
+@app.get("/api/thumb")
+def api_thumb(url: str):
+    """Generate (or serve cached) thumbnail for a media file referenced
+    by its server URL. The cache lives next to the media as
+    `<stem>.thumb.jpg` and is hidden via attrib +H so it doesn't litter
+    the user's File Explorer."""
+    import core, subprocess
+    from urllib.parse import unquote
+    # Map serve-URL → on-disk path under one of the four roots.
+    url = unquote(url or "")
+    if not url.startswith("/"):
+        raise HTTPException(400, "url must be absolute path")
+    parts = url.lstrip("/").split("/", 1)
+    if len(parts) < 2:
+        raise HTTPException(400, "bad url")
+    prefix, rest = parts
+    roots = {
+        "downloads": dl_mod.DOWNLOADS_ROOT,
+        "insta":     ig_mod.INSTA_ROOT,
+        "tiktok":    tt_mod.TIKTOK_ROOT,
+        "uploads":   up_mod.UPLOADS_ROOT,
+    }
+    root = roots.get(prefix)
+    if root is None:
+        raise HTTPException(404, "unknown root")
+    media = (root / rest).resolve()
+    try: media.relative_to(root.resolve())
+    except ValueError: raise HTTPException(400, "path escape")
+    if not media.exists():
+        raise HTTPException(404, "media missing")
+    cache = media.with_suffix(".thumb.jpg")
+    if not cache.exists() or cache.stat().st_mtime < media.stat().st_mtime:
+        # Pull a frame at 1s, scale to 240px wide, JPEG-encode small.
+        # Failing here is fine — caller has a fallback emoji.
+        cmd = [core.FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+               "-ss", "1", "-i", str(media),
+               "-frames:v", "1", "-vf", "scale=240:-2",
+               "-q:v", "5", str(cache)]
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=30)
+            core.hide_file(cache)
+        except Exception:
+            pass
+    if not cache.exists(): raise HTTPException(404, "thumb gen failed")
+    return FileResponse(cache, media_type="image/jpeg")
+
+
 # ---------- Idea (Gemini) ----------
 def _resolve_idea_path(source: str, name: str) -> Path:
     roots = {
@@ -285,10 +382,18 @@ def _resolve_idea_path(source: str, name: str) -> Path:
 def api_idea_start(req: IdeaStartReq):
     path = _resolve_idea_path(req.source, req.name)
     try:
-        job = idea_mod.start_idea(path, req.api_key)
+        job = idea_mod.start_idea(path, req.api_key,
+                                   force=req.force, hint=req.hint)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"id": job.id, "status": job.status}
+
+@app.get("/api/idea/cached")
+def api_idea_cached(source: str, name: str):
+    """UI calls this before opening the modal to know whether a cache
+    hit is available — lets us hide the API-key prompt on cached files."""
+    path = _resolve_idea_path(source, name)
+    return {"cached": idea_mod.has_cached(path)}
 
 @app.get("/api/idea/status/{job_id}")
 def api_idea_status(job_id: str):
