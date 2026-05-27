@@ -34,12 +34,19 @@ class UploadJob:
     def __init__(self, file_path: Path, cfg: dict):
         self.file: Path = file_path
         self.cfg = {
-            "subtitles":     True,       # always — that's the entire point
-            "burn_subs":     True,       # default ON
-            "subs_size":     "medium",
-            "subs_color":    "white",
-            "subs_bg":       "none",
-            "subs_position": "bottom",
+            "subtitles":          True,    # always — that's the entire point
+            "burn_subs":          True,    # default ON
+            "subs_size":          "medium",
+            "subs_color":         "white",
+            "subs_bg":            "none",
+            "subs_position":      "bottom",
+            # Optional watermark — composited in the same burn pass when
+            # burn_subs is on. Resolved via app.py before the cfg lands here.
+            "watermark_name":     "",
+            "watermark_path":     "",
+            "watermark_size":     20,
+            "watermark_opacity":  70,
+            "watermark_position": "center",
             **(cfg or {}),
         }
         # run_id is the UPLOADS_ROOT/<run_id>/ folder name; reused as
@@ -110,17 +117,28 @@ class UploadJob:
             # Step 1: Whisper transcription. Always runs because there
             # are no pre-existing captions on a user upload.
             self.status = "transcribing"
-            self.phase_msg = "генерирую субтитры через Whisper"
+            self.phase_msg = "generating subtitles via Whisper"
             subs_burn.generate_subs_via_whisper(
                 self.file,
                 on_phase=lambda m: setattr(self, "phase_msg", m))
 
             # Step 2: Burn subs into video pixels (re-encode). Skip if
             # user disabled burn — they get a .vtt sidecar instead.
+            # Watermark (if set) is folded into the same pass.
             if self.cfg.get("burn_subs"):
                 self.status = "burning"
                 self.phase_msg = "вшиваю субтитры в видео — re-encoding"
                 subs_burn.burn_subtitles(
+                    self.file, self.cfg,
+                    on_phase=lambda m: setattr(self, "phase_msg", m),
+                    on_proc=lambda p: setattr(self, "_proc", p))
+                try: self.file_size = self.file.stat().st_size
+                except Exception: pass
+            elif self.cfg.get("watermark_name"):
+                # No subs burn, but the user still wants the overlay.
+                self.status = "burning"
+                self.phase_msg = "наношу watermark"
+                subs_burn.apply_watermark(
                     self.file, self.cfg,
                     on_phase=lambda m: setattr(self, "phase_msg", m),
                     on_proc=lambda p: setattr(self, "_proc", p))
@@ -161,7 +179,16 @@ def list_jobs() -> list:
     """In-memory jobs + disk archive of past uploads. Sidecar .vtt files
     are hidden so the user only sees one entry per upload."""
     with _LOCK:
-        live = [j.status_dict() for j in JOBS.values()]
+        live_all = [j.status_dict() for j in JOBS.values()]
+    # Призраки: live-джоб ссылается на отсутствующий файл (переименован
+    # в Explorer'е) → скрываем чтоб не было двойника с disk-сканом ниже.
+    live = []
+    for j in live_all:
+        fn = j.get("file_name"); rid = j.get("run_id")
+        if (fn and rid and j.get("status") == "done"
+                and not (UPLOADS_ROOT / rid / fn).exists()):
+            continue
+        live.append(j)
     seen = {(j["run_id"], j.get("file_name")) for j in live if j.get("file_name")}
     out = list(live)
     if UPLOADS_ROOT.exists():

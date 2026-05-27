@@ -19,3 +19,12 @@ v1/uploads/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Editor backups
+*.bak
+
+# Caption history sidecars (per-clip, regenerable)
+**/.captions/
+**/.frames/
+**/.thumb*.jpg
+**/.thumb*.png

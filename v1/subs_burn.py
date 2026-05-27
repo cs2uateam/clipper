@@ -201,42 +201,194 @@ def generate_subs_via_whisper(
     if on_phase: on_phase("")
     return vtt_path
 
-# ---------- Burn-in ----------
-def burn_subtitles(
+# ---------- Watermark helpers ----------
+WATERMARKS_DIR = Path(__file__).resolve().parent / "watermarks"
+WATERMARKS_DIR.mkdir(exist_ok=True)
+
+def _watermark_xy(position: str) -> str:
+    """ffmpeg overlay `x:y` expr for a position name. W,H = main video
+    dims; w,h = watermark dims. 20px margin from edges for corners."""
+    pos = (position or "center").lower()
+    if pos == "br": return "W-w-20:H-h-20"
+    if pos == "tr": return "W-w-20:20"
+    if pos == "bl": return "20:H-h-20"
+    if pos == "tl": return "20:20"
+    return "(W-w)/2:(H-h)/2"
+
+def resolve_watermark(cfg: dict) -> Optional[Path]:
+    """Public wrapper around _resolve_watermark for callers outside this
+    module (the cutter uses this to know whether to take the re-encode
+    branch). Identical behaviour."""
+    return _resolve_watermark(cfg)
+
+def build_watermark_filter_complex(
+    out_w: int,
+    out_h: int,
+    wm_path: Path,
+    cfg: dict,
+    in_label: str = "0:v",
+    out_label: str = "out",
+) -> str:
+    """Construct the `-filter_complex` expression that overlays `wm_path`
+    onto the video stream `[<in_label>]` and labels the result
+    `[<out_label>]`. Shared between subs_burn's own burn pass and the
+    cutter's single-pass cut+watermark mode.
+
+    Honours `watermark_size` (% of out_w), `watermark_opacity` (%), and
+    `watermark_position` ('center'/'tl'/'tr'/'bl'/'br'/'fill'). The
+    'fill' mode tiles the watermark across the whole canvas via split+
+    N overlays — the same approach used in the analyzer."""
+    try: wm_pct = max(10, min(100, int(cfg.get("watermark_size") or 20))) / 100.0
+    except (TypeError, ValueError): wm_pct = 0.20
+    wm_w = max(40, int(out_w * wm_pct))
+    try: opacity = max(0.10, min(1.0,
+                                  int(cfg.get("watermark_opacity") or 70) / 100.0))
+    except (TypeError, ValueError): opacity = 0.70
+    position = (cfg.get("watermark_position") or "center").lower()
+
+    if position == "fill":
+        pad = max(20, wm_w // 8)
+        # Probe the watermark image so the grid math accounts for its
+        # real aspect — square fallback when probe fails.
+        wm_h_real = wm_w
+        try:
+            pr = subprocess.run(
+                [core.FFPROBE, "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=width,height",
+                 "-of", "csv=p=0", str(wm_path)],
+                capture_output=True, text=True, timeout=10)
+            pw, ph = pr.stdout.strip().split(",")
+            wm_h_real = max(1, int(int(ph) * wm_w / int(pw)))
+        except Exception: pass
+        cols = max(1, (out_w // (wm_w + pad)) + 1)
+        rows = max(1, (out_h // (wm_h_real + pad)) + 1)
+        n = cols * rows
+        split_labels = "".join(f"[wm{i}]" for i in range(n))
+        chain_parts = [
+            f"[1:v]scale={wm_w}:-1,format=rgba,"
+            f"colorchannelmixer=aa={opacity},split={n}{split_labels}"
+        ]
+        step_w = wm_w + pad
+        step_h = wm_h_real + pad
+        grid_w = cols * wm_w + (cols - 1) * pad
+        grid_h = rows * wm_h_real + (rows - 1) * pad
+        x0 = max(0, (out_w - grid_w) // 2)
+        y0 = max(0, (out_h - grid_h) // 2)
+        cur = f"[{in_label}]"
+        for i in range(n):
+            r = i // cols; c = i % cols
+            x = x0 + c * step_w
+            y = y0 + r * step_h
+            stage_out = f"[{out_label}]" if i == n - 1 else f"[v{i+1}]"
+            chain_parts.append(f"{cur}[wm{i}]overlay={x}:{y}{stage_out}")
+            cur = f"[v{i+1}]"
+        return ";".join(chain_parts)
+    xy = _watermark_xy(position)
+    return (f"[1:v]scale={wm_w}:-1,format=rgba,"
+            f"colorchannelmixer=aa={opacity}[wm];"
+            f"[{in_label}][wm]overlay={xy}[{out_label}]")
+
+def _resolve_watermark(cfg: dict) -> Optional[Path]:
+    """Resolve cfg → absolute Path or None. Accepts either an already-
+    resolved `watermark_path` (preferred — caller validated existence)
+    or a bare `watermark_name` we look up under WATERMARKS_DIR. Returns
+    None if no watermark requested, the file is missing, or the position
+    is the sentinel 'none'."""
+    if (cfg.get("watermark_position") or "").lower() == "none":
+        return None
+    wp = cfg.get("watermark_path")
+    if wp:
+        p = Path(wp)
+        return p if p.exists() else None
+    name = (cfg.get("watermark_name") or "").strip()
+    if not name: return None
+    p = WATERMARKS_DIR / name
+    return p if p.exists() else None
+
+def _build_overlay_pass(
     video_path: Path,
     cfg: dict,
-    on_phase: PhaseCb = None,
-    on_proc: ProcCb = None,
-    timeout_s: int = 60 * 60,
-) -> None:
-    """Re-encode `video_path` with subs burned into the picture. Picks
-    the best .vtt sidecar (yt-source > whisper-generated) and applies
-    user style preferences. Replaces the original file in place — the
-    ffmpeg output goes to a temp file then renames over the original.
-    Raises if no .vtt found or ffmpeg fails."""
-    candidates = find_subtitle_files(video_path)
-    if not candidates:
-        raise RuntimeError("subtitle file not found in output dir")
-    yt_subs = [c for c in candidates if ".whisper" not in c.name]
-    subs = yt_subs[0] if yt_subs else candidates[0]
-    # YouTube auto-caption rolling format → clean before burning.
-    if ".whisper" not in subs.name:
-        try: clean_yt_rolling_vtt(subs)
-        except Exception: pass
-    if on_phase: on_phase(f"вшиваю субтитры ({subs.name}) — re-encoding")
+    want_subs: bool,
+) -> Tuple[Optional[list], Optional[Path], str]:
+    """Build a SINGLE ffmpeg command that re-encodes `video_path` with
+    subtitles ± watermark composited in one pass. Returns
+    (cmd, tmp_out_path, summary_msg). cmd is None when there's nothing
+    to do (e.g. want_subs=False and no watermark).
 
-    # ffmpeg subtitles filter wants forward slashes + escaped ':' on Windows
-    subs_arg = str(subs).replace("\\", "/").replace(":", "\\:")
-    style = build_force_style(cfg)
-    vf = f"subtitles='{subs_arg}':force_style='{style}'"
+    Watermark is composited UNDER subtitles so captions stay readable
+    over a 'fill'-tile background."""
+    wm_path = _resolve_watermark(cfg)
+
+    subs_path = None
+    if want_subs:
+        candidates = find_subtitle_files(video_path)
+        if not candidates:
+            raise RuntimeError("subtitle file not found in output dir")
+        yt_subs = [c for c in candidates if ".whisper" not in c.name]
+        subs_path = yt_subs[0] if yt_subs else candidates[0]
+        if ".whisper" not in subs_path.name:
+            try: clean_yt_rolling_vtt(subs_path)
+            except Exception: pass
+
+    if subs_path is None and wm_path is None:
+        return None, None, ""
+
+    # Build subtitles filter expr (no leading [label])
+    subs_filter = None
+    if subs_path:
+        # ffmpeg subtitles filter wants forward slashes + escaped ':' on Win
+        subs_arg = str(subs_path).replace("\\", "/").replace(":", "\\:")
+        style = build_force_style(cfg)
+        subs_filter = f"subtitles='{subs_arg}':force_style='{style}'"
+
     tmp = video_path.with_name(video_path.stem + ".__burning.mp4")
+
+    # Subs-only branch: keep the original simple -vf path. No filter_complex
+    # overhead, no 2nd input. Behaviour unchanged from before watermarks.
+    if wm_path is None:
+        cmd = [core.FFMPEG, "-y", "-loglevel", "error",
+               "-i", str(video_path),
+               "-vf", subs_filter,
+               "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+               "-c:a", "copy",
+               "-movflags", "+faststart",
+               str(tmp)]
+        return cmd, tmp, f"subs={subs_path.name}"
+
+    # Watermark branch (with or without subs) → filter_complex. When
+    # subs follow, the wm chain ends at [wmout] so the subs filter can
+    # consume it; otherwise it ends directly at [out].
+    out_w, out_h = video_dimensions(video_path)
+    wm_chain_out = "wmout" if subs_filter else "out"
+    wm_chain = build_watermark_filter_complex(
+        out_w, out_h, wm_path, cfg,
+        in_label="0:v", out_label=wm_chain_out)
+    if subs_filter:
+        # subs after watermark → captions sit on top, stay readable
+        fc = wm_chain + f";[wmout]{subs_filter}[out]"
+    else:
+        fc = wm_chain
+
     cmd = [core.FFMPEG, "-y", "-loglevel", "error",
-           "-i", str(video_path),
-           "-vf", vf,
+           "-i", str(video_path), "-i", str(wm_path),
+           "-filter_complex", fc,
+           "-map", "[out]", "-map", "0:a?",
            "-c:v", "libx264", "-preset", "medium", "-crf", "20",
            "-c:a", "copy",
            "-movflags", "+faststart",
            str(tmp)]
+    msg = f"wm={wm_path.name} ({position})"
+    if subs_path: msg = f"subs={subs_path.name} + " + msg
+    return cmd, tmp, msg
+
+def _run_overlay_cmd(
+    video_path: Path,
+    cmd: list,
+    tmp: Path,
+    on_proc: ProcCb,
+    timeout_s: int,
+) -> None:
+    """Run a prepared ffmpeg overlay cmd, rename tmp → video on success."""
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                              stderr=subprocess.PIPE)
     if on_proc: on_proc(proc)
@@ -256,7 +408,49 @@ def burn_subtitles(
     try: video_path.unlink()
     except Exception: pass
     tmp.rename(video_path)
+
+# ---------- Burn-in ----------
+def burn_subtitles(
+    video_path: Path,
+    cfg: dict,
+    on_phase: PhaseCb = None,
+    on_proc: ProcCb = None,
+    timeout_s: int = 60 * 60,
+) -> None:
+    """Re-encode `video_path` with subtitles burned into the picture
+    (plus optional watermark composited in the same pass when cfg has
+    `watermark_name`/`watermark_path` set). Picks the best .vtt sidecar
+    (yt-source > whisper-generated) and applies user style prefs.
+    Replaces the original file in place. Raises if no .vtt found or
+    ffmpeg fails."""
+    cmd, tmp, msg = _build_overlay_pass(video_path, cfg, want_subs=True)
+    if cmd is None:
+        # Should never happen for burn_subtitles (subs required) — but
+        # _build_overlay_pass would've raised. Guard anyway.
+        raise RuntimeError("burn_subtitles: no subs and no watermark")
+    if on_phase: on_phase(f"вшиваю ({msg}) — re-encoding")
+    _run_overlay_cmd(video_path, cmd, tmp, on_proc, timeout_s)
     if on_phase: on_phase("")
+
+def apply_watermark(
+    video_path: Path,
+    cfg: dict,
+    on_phase: PhaseCb = None,
+    on_proc: ProcCb = None,
+    timeout_s: int = 60 * 60,
+) -> bool:
+    """Re-encode `video_path` to composite a watermark image (without
+    touching subtitles). Used when the user wants a watermark but no
+    subs burn-in. Returns True if applied, False if no watermark was
+    configured (no-op)."""
+    if _resolve_watermark(cfg) is None:
+        return False
+    cmd, tmp, msg = _build_overlay_pass(video_path, cfg, want_subs=False)
+    if cmd is None: return False
+    if on_phase: on_phase(f"наношу watermark ({msg}) — re-encoding")
+    _run_overlay_cmd(video_path, cmd, tmp, on_proc, timeout_s)
+    if on_phase: on_phase("")
+    return True
 
 # ---------- File-name sanitizer (used by upload to make safe paths) ----------
 _UNSAFE_FN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')

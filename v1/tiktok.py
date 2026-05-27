@@ -8,7 +8,7 @@ Files land in `youtube-analyzer/v1/tiktok/<video_id>/`. Short links
 becomes the folder name even though yt-dlp resolves to the canonical
 numeric ID for the filename — the difference doesn't matter, the user
 operates on file_url not folder names."""
-import re, subprocess, threading, time, urllib.parse
+import re, shutil, subprocess, threading, time, urllib.parse
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -54,12 +54,19 @@ class TikTokJob:
     def __init__(self, url: str, cfg: dict):
         self.url = url
         self.cfg = {
-            "subtitles":     False,
-            "burn_subs":     False,
-            "subs_size":     "medium",
-            "subs_color":    "white",
-            "subs_bg":       "none",
-            "subs_position": "bottom",
+            "subtitles":          False,
+            "burn_subs":          False,
+            "subs_size":          "medium",
+            "subs_color":         "white",
+            "subs_bg":            "none",
+            "subs_position":      "bottom",
+            "audio_only":         False,
+            "audio_format":       "mp3",
+            "watermark_name":     "",
+            "watermark_path":     "",
+            "watermark_size":     20,
+            "watermark_opacity":  70,
+            "watermark_position": "center",
             **(cfg or {}),
         }
         self.video_id = video_id_from_url(url)
@@ -163,10 +170,11 @@ class TikTokJob:
                 self.finished_at = int(time.time())
                 return
             if not (self.file and self.file.exists()):
+                exts = (".mp3", ".m4a") if self.cfg.get("audio_only") else \
+                       (".mp4", ".mov", ".mkv", ".webm")
                 cands = sorted(
                     [p for p in TIKTOK_ROOT.iterdir()
-                     if p.is_file() and p.suffix.lower() in
-                     (".mp4", ".mov", ".mkv", ".webm")
+                     if p.is_file() and p.suffix.lower() in exts
                      and p.stem == self.video_id],
                     key=lambda p: -p.stat().st_mtime)
                 if cands:
@@ -182,18 +190,20 @@ class TikTokJob:
             # TikTok generally serves H.264, but the same VP9-in-mp4
             # situation that hits Instagram can show up here too — keep
             # the safety net so AE/Premiere always get a clean h264 file.
-            try:
-                prev_status = self.status
-                self.status = "transcoding"
-                self._ensure_h264()
-                self.status = prev_status
-                self.file_size = self.file.stat().st_size
-            except Exception as e:
-                self.error = f"h264 transcode failed: {e}"
-            if self.cfg.get("subtitles"):
+            # На audio-only пропускаем — нет видеотрека.
+            if not self.cfg.get("audio_only"):
+                try:
+                    prev_status = self.status
+                    self.status = "transcoding"
+                    self._ensure_h264()
+                    self.status = prev_status
+                    self.file_size = self.file.stat().st_size
+                except Exception as e:
+                    self.error = f"h264 transcode failed: {e}"
+            if self.cfg.get("subtitles") and not self.cfg.get("audio_only"):
                 try:
                     self.status = "transcribing"
-                    self.phase_msg = "генерирую субтитры через Whisper"
+                    self.phase_msg = "generating subtitles via Whisper"
                     subs_burn.generate_subs_via_whisper(
                         self.file,
                         on_phase=lambda m: setattr(self, "phase_msg", m))
@@ -203,7 +213,7 @@ class TikTokJob:
                     and self.file):
                 try:
                     self.status = "burning"
-                    self.phase_msg = "вшиваю субтитры в видео — re-encoding"
+                    self.phase_msg = "burning subtitles into video — re-encoding"
                     subs_burn.burn_subtitles(
                         self.file, self.cfg,
                         on_phase=lambda m: setattr(self, "phase_msg", m),
@@ -211,6 +221,18 @@ class TikTokJob:
                     self.file_size = self.file.stat().st_size
                 except Exception as e:
                     self.error = f"burn-subs failed: {e}"
+            elif (self.file and not self.cfg.get("audio_only")
+                  and self.cfg.get("watermark_name")):
+                try:
+                    self.status = "burning"
+                    self.phase_msg = "applying watermark — re-encoding"
+                    subs_burn.apply_watermark(
+                        self.file, self.cfg,
+                        on_phase=lambda m: setattr(self, "phase_msg", m),
+                        on_proc=lambda p: setattr(self, "_proc", p))
+                    self.file_size = self.file.stat().st_size
+                except Exception as e:
+                    self.error = f"watermark failed: {e}"
             self.status = "done"
             self.phase_msg = ""
             self.finished_at = int(time.time())
@@ -230,7 +252,7 @@ class TikTokJob:
         codec = (probe.stdout or "").strip().lower()
         if codec in ("h264", "avc1"):
             return
-        self.phase_msg = f"перекодирую {codec}→h264 (для AE/Premiere)"
+        self.phase_msg = f"re-encoding {codec}→h264 (for AE/Premiere)"
         tmp = self.file.with_name(self.file.stem + ".h264.mp4")
         cmd = [core.FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
                "-i", str(self.file),
@@ -257,9 +279,13 @@ class TikTokJob:
         cmd = [core.YTDLP, "--newline", "--no-warnings",
                "--ffmpeg-location", core.FFMPEG,
                "-o", out_tpl,
-               "--restrict-filenames",
-               "--merge-output-format", "mp4",
-               self.url]
+               "--restrict-filenames"]
+        if self.cfg.get("audio_only"):
+            af = (self.cfg.get("audio_format") or "mp3").lower()
+            cmd += ["-x", "--audio-format", af, "--audio-quality", "0"]
+        else:
+            cmd += ["--merge-output-format", "mp4"]
+        cmd.append(self.url)
         return cmd
 
     def _parse_line(self, line: str):
@@ -274,7 +300,10 @@ class TikTokJob:
         m = _DEST_RE.match(line)
         if m:
             p = Path(m.group(1))
-            if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm"):
+            # Accept audio outputs (audio_only=mp3/m4a) — extract-audio
+            # этап yt-dlp финализирует именно в этих расширениях.
+            if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm",
+                                    ".mp3", ".m4a"):
                 self.file = p
                 if not self.title: self.title = p.stem
             return
@@ -308,7 +337,7 @@ def stop_job(job_id: str) -> Optional[TikTokJob]:
 
 _SIDECAR_EXTS = (".vtt", ".srt", ".srv1", ".srv2", ".srv3", ".ttml",
                  ".json3", ".info.json", ".description", ".log")
-_MEDIA_EXTS = (".mp4", ".mov", ".mkv", ".webm")
+_MEDIA_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".mp3", ".m4a")
 
 def _is_sidecar(p: Path) -> bool:
     name = p.name.lower()
@@ -321,6 +350,10 @@ def _delete_with_sidecars(media: Path):
     prefix = media.stem + "."
     try: media.unlink()
     except Exception: pass
+    cache_dir = parent / ".frames" / media.stem
+    if cache_dir.exists():
+        try: shutil.rmtree(cache_dir, ignore_errors=True)
+        except Exception: pass
     for sib in parent.iterdir():
         if not sib.is_file(): continue
         if sib.name.startswith(prefix):
@@ -329,7 +362,15 @@ def _delete_with_sidecars(media: Path):
 
 def list_jobs() -> list:
     with _LOCK:
-        live = [j.status_dict() for j in JOBS.values()]
+        live_all = [j.status_dict() for j in JOBS.values()]
+    # Призраки: live-джоб ссылается на отсутствующий файл (переименован в
+    # Explorer'е) → скрываем чтоб не было двойника с disk-сканом ниже.
+    live = []
+    for j in live_all:
+        fn = j.get("file_name")
+        if fn and j.get("status") == "done" and not (TIKTOK_ROOT / fn).exists():
+            continue
+        live.append(j)
     seen = {j.get("file_name") for j in live if j.get("file_name")}
     out = list(live)
     if TIKTOK_ROOT.exists():

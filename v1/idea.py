@@ -37,8 +37,59 @@ Return a strict JSON object with these keys:
 - hook: string — one sentence in English describing the single most attention-grabbing moment, referencing what's visible
 - tiktok: array of EXACTLY 3 English captions for TikTok (each ≤100 chars, hook-driven, 1-2 emoji each, written like a real creator not a corporate intern)
 - shorts: array of EXACTLY 3 English titles for YouTube Shorts (each ≤80 chars, click-driven, no clickbait lies, no emoji)
-- long_caption: string — a longer English caption suitable for an Instagram/YouTube description field. 120-220 words, 2-4 short paragraphs separated by `\\n\\n`. Open with a hook, give context, end with a CTA inviting comment/follow/save. 1-3 emoji total, sprinkled (not stacked). NO hashtags inside this field — those go to `tags`.
-- tags: array of EXACTLY 15 English hashtag words (no # prefix, no spaces, ranked most-relevant first)
+- long_caption: string — the COMPLETE Instagram post body, ready to paste into the description field. Must follow this exact structure (use real `\\n` line breaks between sections):
+
+    Line 1: short hooky header in English with one emoji and a `👇` arrow at the end (max ~60 chars).
+    Blank line.
+    Body: EXACTLY 5 paragraphs in English, each 70-110 words, separated by ONE blank line. Each paragraph develops a distinct angle (context, what changed, why it matters, deeper layer, takeaway). No clickbait, no fake hype. Maximum 3 emoji TOTAL across the body, sprinkled (not stacked). NO hashtags inside the body. NO bullet lists inside the body.
+    Blank line.
+    A line containing literally `🔑 Keywords`.
+    Then 12-14 plain keyword lines, one per line, NO `#` prefix, NO commas. Mix specific (CS2 ranked match, CS2 smoke play) and broad (PC FPS gaming, esports gameplay) — ranked most-relevant first.
+    Blank line.
+    Final single line: EXACTLY 5 hashtags separated by single spaces, each starts with `#`, no spaces inside hashtags.
+
+  CRITICAL — these 5 hashtags drive niche discoverability. Generic safe tags are FORBIDDEN. You MUST reason from the actual content.
+
+  TIER STRUCTURE (use this exact order):
+    1. HYPER-NICHE — combine concrete content nouns into a compound tag.
+       Format examples: `#donk1v4`, `#m0NESYflick`, `#mirageDeagleAce`, `#nukeRetake`,
+       `#zywooAWPshot`, `#s1mpleClutch`, `#majorGrandFinal`.
+       This tag MUST cite a SPECIFIC element visible/heard in this exact clip.
+    2. MICRO-NICHE — single specific noun from the clip: a player name, map name,
+       weapon name, or situation type. Examples: `#mirage`, `#deagleAce`, `#1v4Clutch`,
+       `#noscope`, `#wallbang`, `#ninjaDefuse`.
+    3. GAME-SPECIFIC — `#CS2` or `#CounterStrike2` (only one of these).
+    4. GAME-BROAD — `#CounterStrike` or `#CSGO` (only if older clip, otherwise pick
+       another micro-niche or skip to a content-angle tag like `#proPlay`, `#tier1cs`,
+       `#majorMoment`).
+    5. ANGLE TAG — describes the CONTENT TYPE not the platform: `#fragMovie`,
+       `#clutchHighlight`, `#aceMontage`, `#proAnalysis`, `#esportsHighlight`.
+
+  CS2-TAXONOMY (use as a lookup when scanning transcript/keyframes — do not invent
+  names that aren't actually there):
+    Players: donk, m0NESY, ZywOo, s1mple, NiKo, sh1ro, FalleN, broky, ropz, Twistzz,
+             NAF, device, electronic, dupreeh, Magisk, frozen, b1t, jL, w0nderful,
+             KSCERATO, yuurih, malbsMd, hampus, jks, EliGE, nitr0.
+    Teams:   FaZe, NAVI, G2, Vitality, Spirit, MOUZ, Astralis, Heroic, Liquid, Cloud9,
+             FURIA, ENCE, BIG, Eternal Fire, paiN, MIBR, Imperial.
+    Maps:    Mirage, Inferno, Nuke, Dust2, Ancient, Anubis, Vertigo, Train, Overpass.
+    Weapons: AWP, Deagle, USP, M4A4, M4A1S, AK47, Tec9, FiveSeven, Scout, Krieg, Negev.
+    Situations: ace, clutch, 1v2, 1v3, 1v4, 1v5, noscope, wallbang, ninjaDefuse,
+                triple, quadra, prefire, flick, retake, eco, antiEco, pistolRound.
+    Tournaments: Major, IEM, BLAST, ESL Pro, PGL, Cologne, Katowice, Paris, Copenhagen.
+
+  ABSOLUTELY FORBIDDEN tags (do not use these — they add zero discoverability signal):
+    #FPSGaming, #PCGaming, #VideoGames, #Gamer, #Gaming, #GamingContent, #GamingReels,
+    #Esports (alone, without context), #Game, #PC, #viral, #fyp, #foryou, #trending,
+    #shorts, #reels, #explore, #insta, #instagram.
+
+  EXAMPLES of good vs bad output for a clip showing donk's 1v4 on Mirage with a Deagle:
+    BAD (rejected):   `#CS2 #CounterStrike2 #FPSGaming #PCGaming #Esports`
+    GOOD (accepted):  `#donk1v4 #mirageDeagle #CS2 #majorMoment #clutchHighlight`
+
+  Total length: ~500-650 words. Output as ONE STRING with embedded newlines, NOT an object.
+
+- tags: array of EXACTLY 5 English hashtag words (no # prefix, no spaces) — MUST be the same 5 tags as the final hashtag line of long_caption, in the same order. Same tier structure, same forbidden list.
 
 Output ONLY the JSON, no preamble, no code fence."""
 
@@ -47,10 +98,17 @@ _RESPONSE_SCHEMA = {
     "properties": {
         "hype_score":   {"type": "number"},
         "hook":         {"type": "string"},
-        "tiktok":       {"type": "array", "items": {"type": "string"}},
-        "shorts":       {"type": "array", "items": {"type": "string"}},
+        # Explicit length bounds — Gemini в structured-output режиме
+        # принимает schema как hard-constraint. Без minItems/maxItems
+        # модель свободно расширяет массивы ("EXACTLY N" в текстовом
+        # промпте часто игнорируется, особенно для tags).
+        "tiktok": {"type": "array", "items": {"type": "string"},
+                   "minItems": 3, "maxItems": 3},
+        "shorts": {"type": "array", "items": {"type": "string"},
+                   "minItems": 3, "maxItems": 3},
         "long_caption": {"type": "string"},
-        "tags":         {"type": "array", "items": {"type": "string"}},
+        "tags":   {"type": "array", "items": {"type": "string"},
+                   "minItems": 5, "maxItems": 5},
     },
     "required": ["hype_score", "hook", "tiktok", "shorts",
                  "long_caption", "tags"],
@@ -339,3 +397,87 @@ def get_job(job_id: str) -> Optional[IdeaJob]:
 def drop_job(job_id: str) -> bool:
     with _LOCK:
         return JOBS.pop(job_id, None) is not None
+
+
+def prepare_inputs(file_path: Path, n_frames: int = 0) -> dict:
+    """Run the EXTRACT + TRANSCRIBE half of the idea pipeline and stop —
+    no Gemini call. Used by external agents (curator) that want to write
+    their OWN caption using Claude/whatever, not Gemini.
+
+    `n_frames=0` → auto: clamp(12, dur_sec / 2, 30). Floor 12 keeps short
+    reels dense (every beat visible); ~1 frame per 2 sec in the middle;
+    cap 30 prevents long matches from blowing up the caller's vision
+    budget. Explicit positive `n_frames` overrides the formula.
+
+    Frames are written into a sibling `.frames/<stem>/fN.jpg` cache
+    folder so they don't pollute the user's "Open folder" view — the
+    media file stays alone in its parent directory."""
+    if not file_path.exists():
+        raise ValueError(f"file missing: {file_path}")
+    # 1. Frames — JPEG cache in a per-media subfolder.
+    probe = subprocess.run(
+        [core.FFPROBE, "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(file_path)],
+        capture_output=True, text=True)
+    try:
+        dur = float((probe.stdout or "0").strip())
+    except ValueError:
+        dur = 0.0
+    if dur <= 0:
+        raise RuntimeError("ffprobe failed to read duration")
+    if n_frames <= 0:
+        n_frames = max(12, min(30, int(dur / 2)))
+    frames_dir = file_path.parent / ".frames" / file_path.stem
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    frame_paths = []
+    for i in range(1, n_frames + 1):
+        t = dur * i / (n_frames + 1)
+        out_p = frames_dir / f"f{i}.jpg"
+        r = subprocess.run(
+            [core.FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+             "-ss", f"{t:.2f}", "-i", str(file_path),
+             "-vframes", "1", "-vf", "scale='min(1280,iw)':-2",
+             "-q:v", "4", str(out_p)],
+            capture_output=True, timeout=30)
+        if r.returncode == 0 and out_p.exists():
+            frame_paths.append(str(out_p.resolve()))
+    if not frame_paths:
+        raise RuntimeError("frame extraction yielded nothing")
+    # 2. Transcript — prefer existing .vtt sidecar, fall back to Whisper.
+    transcript = ""
+    existing = subs_burn.find_subtitle_files(file_path)
+    if existing:
+        transcript = _vtt_to_plain(existing[0])
+    if not transcript.strip():
+        try:
+            subs_burn.generate_subs_via_whisper(file_path)
+            again = subs_burn.find_subtitle_files(file_path)
+            if again:
+                transcript = _vtt_to_plain(again[0])
+        except Exception:
+            # Silent clips are fine — agent can describe from frames alone.
+            transcript = ""
+    return {
+        "transcript": transcript,
+        "frames":     frame_paths,
+        "duration_s": round(dur, 2),
+    }
+
+
+def _vtt_to_plain(vtt: Path) -> str:
+    """Standalone copy of IdeaJob._vtt_to_plain so prepare_inputs doesn't
+    need a job instance."""
+    import re as _re
+    lines = []
+    try:
+        for raw in vtt.read_text("utf-8", errors="ignore").splitlines():
+            s = raw.strip()
+            if not s: continue
+            if s.upper().startswith("WEBVTT"): continue
+            if "-->" in s: continue
+            if s.isdigit(): continue
+            s = _re.sub(r"<[^>]+>", "", s)
+            lines.append(s)
+    except Exception:
+        return ""
+    return " ".join(lines).strip()

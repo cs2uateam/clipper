@@ -8,7 +8,7 @@ upload tab via `subs_burn`).
 
 Files land in `youtube-analyzer/v1/insta/<reel_id>/`. No cookies, no
 authenticated content — anything that 403s is just out of scope."""
-import re, subprocess, threading, time, urllib.parse
+import re, shutil, subprocess, threading, time, urllib.parse
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -46,12 +46,19 @@ class InstaJob:
     def __init__(self, url: str, cfg: dict):
         self.url = url
         self.cfg = {
-            "subtitles":     False,      # off by default — reels are short
-            "burn_subs":     False,
-            "subs_size":     "medium",
-            "subs_color":    "white",
-            "subs_bg":       "none",
-            "subs_position": "bottom",
+            "subtitles":          False,   # off by default — reels are short
+            "burn_subs":          False,
+            "subs_size":          "medium",
+            "subs_color":         "white",
+            "subs_bg":            "none",
+            "subs_position":      "bottom",
+            "audio_only":         False,
+            "audio_format":       "mp3",
+            "watermark_name":     "",
+            "watermark_path":     "",
+            "watermark_size":     20,
+            "watermark_opacity":  70,
+            "watermark_position": "center",
             **(cfg or {}),
         }
         self.reel_id = reel_id_from_url(url)
@@ -160,10 +167,11 @@ class InstaJob:
             # Destination line we already captured; if not, scan the
             # flat root for a media file matching this reel's id.
             if not (self.file and self.file.exists()):
+                exts = (".mp3", ".m4a") if self.cfg.get("audio_only") else \
+                       (".mp4", ".mov", ".mkv", ".webm")
                 cands = sorted(
                     [p for p in INSTA_ROOT.iterdir()
-                     if p.is_file() and p.suffix.lower() in
-                     (".mp4", ".mov", ".mkv", ".webm")
+                     if p.is_file() and p.suffix.lower() in exts
                      and p.stem == self.reel_id],
                     key=lambda p: -p.stat().st_mtime)
                 if cands:
@@ -181,34 +189,39 @@ class InstaJob:
             # but VP9 inside mp4 isn't a format After Effects / Premiere
             # / most NLEs accept natively — they need H.264. Transcode
             # if needed; cheap no-op (single ffprobe) for h264 sources.
-            try:
-                prev_status = self.status
-                self.status = "transcoding"
-                self._ensure_h264()
-                self.status = prev_status
-                self.file_size = self.file.stat().st_size
-            except Exception as e:
-                self.error = f"h264 transcode failed: {e}"
+            # Не делаем для audio-only (mp3/m4a) — там нет видеотрека.
+            if not self.cfg.get("audio_only"):
+                try:
+                    prev_status = self.status
+                    self.status = "transcoding"
+                    self._ensure_h264()
+                    self.status = prev_status
+                    self.file_size = self.file.stat().st_size
+                except Exception as e:
+                    self.error = f"h264 transcode failed: {e}"
             # Optional Whisper transcription. Instagram never serves
             # platform-side captions for reels → Whisper is the only
             # path. Off by default because reels are short and the user
-            # often just wants the raw clip.
-            if self.cfg.get("subtitles"):
+            # often just wants the raw clip. На audio-only пропускаем —
+            # burn-subs всё равно не сработает (нет видео), а просто
+            # .vtt сбоку рядом с mp3 нет смысла.
+            if self.cfg.get("subtitles") and not self.cfg.get("audio_only"):
                 try:
                     self.status = "transcribing"
-                    self.phase_msg = "генерирую субтитры через Whisper"
+                    self.phase_msg = "generating subtitles via Whisper"
                     subs_burn.generate_subs_via_whisper(
                         self.file,
                         on_phase=lambda m: setattr(self, "phase_msg", m))
                 except Exception as e:
                     self.error = f"Whisper failed: {e}"
             # Optional burn. Same module as download/upload tabs — fix
-            # there propagates everywhere.
+            # there propagates everywhere. Watermark (when set) is folded
+            # into the same pass.
             if (self.cfg.get("burn_subs") and self.cfg.get("subtitles")
                     and self.file):
                 try:
                     self.status = "burning"
-                    self.phase_msg = "вшиваю субтитры в видео — re-encoding"
+                    self.phase_msg = "burning subtitles into video — re-encoding"
                     subs_burn.burn_subtitles(
                         self.file, self.cfg,
                         on_phase=lambda m: setattr(self, "phase_msg", m),
@@ -216,6 +229,18 @@ class InstaJob:
                     self.file_size = self.file.stat().st_size
                 except Exception as e:
                     self.error = f"burn-subs failed: {e}"
+            elif (self.file and not self.cfg.get("audio_only")
+                  and self.cfg.get("watermark_name")):
+                try:
+                    self.status = "burning"
+                    self.phase_msg = "applying watermark — re-encoding"
+                    subs_burn.apply_watermark(
+                        self.file, self.cfg,
+                        on_phase=lambda m: setattr(self, "phase_msg", m),
+                        on_proc=lambda p: setattr(self, "_proc", p))
+                    self.file_size = self.file.stat().st_size
+                except Exception as e:
+                    self.error = f"watermark failed: {e}"
             self.status = "done"
             self.phase_msg = ""
             self.finished_at = int(time.time())
@@ -238,7 +263,7 @@ class InstaJob:
         codec = (probe.stdout or "").strip().lower()
         if codec in ("h264", "avc1"):
             return
-        self.phase_msg = f"перекодирую {codec}→h264 (для AE/Premiere)"
+        self.phase_msg = f"re-encoding {codec}→h264 (for AE/Premiere)"
         tmp = self.file.with_name(self.file.stem + ".h264.mp4")
         cmd = [core.FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
                "-i", str(self.file),
@@ -267,9 +292,13 @@ class InstaJob:
         cmd = [core.YTDLP, "--newline", "--no-warnings",
                "--ffmpeg-location", core.FFMPEG,
                "-o", out_tpl,
-               "--restrict-filenames",
-               "--merge-output-format", "mp4",
-               self.url]
+               "--restrict-filenames"]
+        if self.cfg.get("audio_only"):
+            af = (self.cfg.get("audio_format") or "mp3").lower()
+            cmd += ["-x", "--audio-format", af, "--audio-quality", "0"]
+        else:
+            cmd += ["--merge-output-format", "mp4"]
+        cmd.append(self.url)
         return cmd
 
     def _parse_line(self, line: str):
@@ -284,7 +313,11 @@ class InstaJob:
         m = _DEST_RE.match(line)
         if m:
             p = Path(m.group(1))
-            if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm"):
+            # Принимаем и аудио-форматы (audio_only=mp3/m4a) — иначе финальный
+            # extract-audio шаг yt-dlp'а оставит self.file пустым и UI решит
+            # что скачивание не удалось.
+            if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm",
+                                    ".mp3", ".m4a"):
                 self.file = p
                 if not self.title: self.title = p.stem
             return
@@ -320,7 +353,7 @@ def stop_job(job_id: str) -> Optional[InstaJob]:
 # flat root and must be hidden from the user-facing list.
 _SIDECAR_EXTS = (".vtt", ".srt", ".srv1", ".srv2", ".srv3", ".ttml",
                  ".json3", ".info.json", ".description", ".log")
-_MEDIA_EXTS = (".mp4", ".mov", ".mkv", ".webm")
+_MEDIA_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".mp3", ".m4a")
 
 def _is_sidecar(p: Path) -> bool:
     name = p.name.lower()
@@ -329,13 +362,18 @@ def _is_sidecar(p: Path) -> bool:
     return any(name.endswith(ext) for ext in _SIDECAR_EXTS)
 
 def _delete_with_sidecars(media: Path):
-    """Remove media file + every sidecar sharing its stem (`<stem>.*`).
+    """Remove media file + every sidecar sharing its stem (`<stem>.*`)
+    and the per-media keyframe cache at `<parent>/.frames/<stem>/`.
     Used by both completion-cleanup and user-driven delete."""
     if not media.exists(): return
     parent = media.parent
     prefix = media.stem + "."   # matches <stem>.en.vtt, <stem>.ytdlp.log…
     try: media.unlink()
     except Exception: pass
+    cache_dir = parent / ".frames" / media.stem
+    if cache_dir.exists():
+        try: shutil.rmtree(cache_dir, ignore_errors=True)
+        except Exception: pass
     for sib in parent.iterdir():
         if not sib.is_file(): continue
         if sib.name.startswith(prefix):
@@ -344,7 +382,16 @@ def _delete_with_sidecars(media: Path):
 
 def list_jobs() -> list:
     with _LOCK:
-        live = [j.status_dict() for j in JOBS.values()]
+        live_all = [j.status_dict() for j in JOBS.values()]
+    # Призраки: live-джоб с file_name указывает на файл которого больше
+    # нет на диске (юзер переименовал в Explorer). Фильтруем такие — иначе
+    # листинг покажет двойник (призрак + ig_disk:<новое имя>).
+    live = []
+    for j in live_all:
+        fn = j.get("file_name")
+        if fn and j.get("status") == "done" and not (INSTA_ROOT / fn).exists():
+            continue
+        live.append(j)
     seen = {j.get("file_name") for j in live if j.get("file_name")}
     out = list(live)
     if INSTA_ROOT.exists():

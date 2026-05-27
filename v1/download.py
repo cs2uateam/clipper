@@ -9,7 +9,7 @@ Files land FLAT in `clipper/v1/downloads/youtube/<vid>.<ext>` (matches
 insta/tiktok layout). Sidecars (`.vtt`, `.ytdlp.log`, `.info.json`)
 sit next to the mp4 with the same `<vid>.` stem prefix and are hidden
 from the UI list."""
-import re, subprocess, threading, time, urllib.parse
+import re, shutil, subprocess, threading, time, urllib.parse
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -91,6 +91,14 @@ class DownloadJob:
             "start_t":      None,
             "end_t":        None,
             "aspect":       "source",    # source / 9:16 / 16:9 / 1:1 / 4:5 / W:H
+            # Watermark — empty `watermark_name` (or position=none) disables.
+            # When burn_subs is also on, the watermark is composited in the
+            # same ffmpeg pass as the subs (no extra re-encode).
+            "watermark_name":     "",
+            "watermark_path":     "",          # resolved by app.py
+            "watermark_size":     20,          # 10..100, % of output width
+            "watermark_opacity":  70,          # 10..100, %
+            "watermark_position": "center",    # center/tl/tr/bl/br/fill/none
             **(cfg or {}),
         }
         try:
@@ -120,6 +128,18 @@ class DownloadJob:
         self._section_start = 0.0
         self._section_end = 0.0
         self._section_duration = 0.0
+        # Output stem. For full downloads it's just `<vid>`. For section
+        # downloads we append `_<start>-<end>` so a second download of the
+        # same video with a different range doesn't collide with the first
+        # — yt-dlp would otherwise see the existing file and skip the
+        # re-fetch, returning the OLD section's bytes.
+        s_t = self.cfg.get("start_t"); e_t = self.cfg.get("end_t")
+        if s_t is not None or e_t is not None:
+            s_tag = int(s_t or 0)
+            e_tag = int(e_t) if e_t is not None else 0
+            self._stem = f"{self.vid}_{s_tag}-{e_tag}"
+        else:
+            self._stem = self.vid
 
     # ---------- public ----------
     def start(self):
@@ -187,7 +207,7 @@ class DownloadJob:
             # — we tail it for progress lines instead.
             # Per-job log lives at `<vid>.ytdlp.log` so concurrent
             # downloads don't stomp each other in the flat root.
-            log_path = DOWNLOADS_ROOT / f"{self.vid}.ytdlp.log"
+            log_path = DOWNLOADS_ROOT / f"{self._stem}.ytdlp.log"
             try: log_path.unlink()
             except Exception: pass
             log_handle = open(log_path, "ab", buffering=0)
@@ -224,7 +244,7 @@ class DownloadJob:
                     # Find a media file matching this vid in the flat root.
                     candidates = sorted(
                         [p for p in DOWNLOADS_ROOT.iterdir()
-                         if p.is_file() and p.stem == self.vid
+                         if p.is_file() and p.stem == self._stem
                          and p.suffix.lower() in (".mp4",".m4a",".mp3",".webm",".mkv",".mov")],
                         key=lambda p: -p.stat().st_mtime)
                     if candidates:
@@ -242,7 +262,7 @@ class DownloadJob:
                 if aspect and aspect != "source" and self.file and not self.cfg.get("audio_only"):
                     try:
                         self.status = "reformatting"
-                        self.phase_msg = f"конвертирую в {aspect}"
+                        self.phase_msg = f"converting to {aspect}"
                         self._apply_aspect(aspect)
                         self.file_size = self.file.stat().st_size
                     except Exception as e:
@@ -259,14 +279,16 @@ class DownloadJob:
                     if not yt_vtts:
                         try:
                             self.status = "transcribing"
-                            self.phase_msg = "субтитров на YouTube нет — гоню Whisper"
+                            self.phase_msg = "no captions on YouTube — running Whisper"
                             subs_burn.generate_subs_via_whisper(
                                 self.file,
                                 on_phase=lambda m: setattr(self, "phase_msg", m))
                         except Exception as e:
                             self.error = (f"YouTube has no captions and Whisper "
                                           f"fallback failed: {e}")
-                # Optional post-process: burn subtitles into video pixels
+                # Optional post-process: burn subtitles into video pixels.
+                # When a watermark is also set, it's composited in the SAME
+                # ffmpeg pass — no extra re-encode.
                 if (self.cfg.get("burn_subs") and self.cfg.get("subtitles")
                         and not self.cfg.get("audio_only") and self.file):
                     try:
@@ -278,6 +300,20 @@ class DownloadJob:
                         self.file_size = self.file.stat().st_size
                     except Exception as e:
                         self.error = f"burn-subs failed: {e}"
+                # Watermark-only branch: user wants the overlay but not
+                # subs (or no subs available). Skip if burn_subs ran above
+                # — it already folded watermark into its pass.
+                elif (not self.cfg.get("audio_only") and self.file
+                      and self.cfg.get("watermark_name")):
+                    try:
+                        self.status = "burning"
+                        subs_burn.apply_watermark(
+                            self.file, self.cfg,
+                            on_phase=lambda m: setattr(self, "phase_msg", m),
+                            on_proc=lambda p: setattr(self, "_proc", p))
+                        self.file_size = self.file.stat().st_size
+                    except Exception as e:
+                        self.error = f"watermark failed: {e}"
                 self.status = "done"
             else:
                 if self.status != "cancelled":
@@ -318,10 +354,11 @@ class DownloadJob:
         tmp.rename(self.file)
 
     def _build_cmd(self):
-        # Output template uses `%(id)s.%(ext)s` so each video is
-        # `<vid>.mp4` directly in the flat root. Drops the title from
-        # the filename — title still surfaces in `self.title` and the UI.
-        out_tpl = str(DOWNLOADS_ROOT / "%(id)s.%(ext)s")
+        # Output template: stem is `<vid>` for full downloads,
+        # `<vid>_<start>-<end>` for sectioned ones (see __init__).
+        # Sectioned-distinct names prevent yt-dlp from treating a
+        # different-range request as "already downloaded".
+        out_tpl = str(DOWNLOADS_ROOT / f"{self._stem}.%(ext)s")
         cmd = [core.YTDLP, "--newline", "--no-warnings",
                "--ffmpeg-location", core.FFMPEG,
                "-o", out_tpl,
@@ -483,7 +520,15 @@ def _is_sidecar(p: Path) -> bool:
 
 def list_jobs() -> list:
     with _LOCK:
-        live = [j.status_dict() for j in JOBS.values()]
+        live_all = [j.status_dict() for j in JOBS.values()]
+    # Призраки: live-джоб ссылается на отсутствующий файл (переименован в
+    # Explorer'е) → скрываем чтоб не было двойника с disk-сканом ниже.
+    live = []
+    for j in live_all:
+        fn = j.get("file_name")
+        if fn and j.get("status") == "done" and not (DOWNLOADS_ROOT / fn).exists():
+            continue
+        live.append(j)
     seen = {j.get("file_name") for j in live if j.get("file_name")}
     out = list(live)
     if DOWNLOADS_ROOT.exists():
@@ -494,11 +539,16 @@ def list_jobs() -> list:
             if f.name in seen: continue
             try: stat = f.stat()
             except Exception: continue
+            # Sectioned downloads have stem `<vid>_<start>-<end>`; strip
+            # that suffix to recover the real YouTube id for the URL.
+            stem = f.stem
+            sec_m = re.match(r"^([A-Za-z0-9_-]{11})_(\d+)-(\d+)$", stem)
+            real_vid = sec_m.group(1) if sec_m else stem
             out.append({
                 "id":          f"disk:{f.name}",
-                "vid":         f.stem,
-                "url":         f"https://www.youtube.com/watch?v={f.stem}",
-                "title":       f.stem,
+                "vid":         real_vid,
+                "url":         f"https://www.youtube.com/watch?v={real_vid}",
+                "title":       stem,
                 "status":      "done",
                 "progress_pct":100.0,
                 "file_url":    f"/downloads/{urllib.parse.quote(f.name)}",
@@ -539,12 +589,18 @@ def delete_job(job_id: str) -> bool:
 
 def _delete_file_with_sidecars(media_path: Path):
     """Remove the media file plus any sidecars sharing its stem
-    (`<vid>.en.vtt`, `<vid>.ytdlp.log`, `<vid>.info.json`, etc.)."""
+    (`<vid>.en.vtt`, `<vid>.ytdlp.log`, `<vid>.info.json`, etc.)
+    and the per-media keyframe cache at `<parent>/.frames/<stem>/`."""
     if not media_path.exists(): return
     parent = media_path.parent
     prefix = media_path.stem + "."
     try: media_path.unlink()
     except Exception: pass
+    # Wipe the keyframe cache for this clip.
+    cache_dir = parent / ".frames" / media_path.stem
+    if cache_dir.exists():
+        try: shutil.rmtree(cache_dir, ignore_errors=True)
+        except Exception: pass
     if not parent.exists(): return
     for sib in parent.iterdir():
         if not sib.is_file(): continue
