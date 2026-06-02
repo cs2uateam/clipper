@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import download as dl_mod
+import livedl as livedl_mod
 import upload as up_mod
 import insta as ig_mod
 import tiktok as tt_mod
@@ -52,6 +53,28 @@ class DownloadStartReq(_WatermarkOpts):
     start_t: Optional[int] = None
     end_t: Optional[int] = None
     aspect: str = "source"   # source / 9:16 / 16:9 / 1:1 / 4:5 / W:H
+
+class LiveDlStartReq(BaseModel):
+    """Inputs for a live-stream section download. start_t/end_t are
+    absolute stream-seconds since broadcast start. quality matches the
+    YouTube tab's set (720/1080/1440/2160/best). No subs/watermark/aspect
+    here — this is a raw section grabber, post-process via Cut tab."""
+    url: str
+    quality: str = "1080"
+    start_t: int = 0
+    end_t: int
+    # Optional diagnostics: what the frontend's snapshot looked like at
+    # click-time. Used only to surface drift in job-status (so we can
+    # spot stale-snapshot bugs without devtools).
+    frontend_now_s: Optional[int] = None
+    frontend_captured_ms: Optional[int] = None
+
+class LiveDlProbeReq(BaseModel):
+    """Probe a YT live URL for current DVR-buffer length. Frontend
+    captures this snapshot on URL paste so user-entered YT-style
+    `-MM:SS` (time-behind-live) can be resolved to absolute stream
+    seconds without race-condition drift against the advancing live edge."""
+    url: str
 
 class InstaStartReq(_WatermarkOpts):
     url: str
@@ -191,6 +214,60 @@ def api_download_delete(job_id: str):
         raise HTTPException(404, "unknown or already deleted")
     return {"deleted": job_id}
 
+# ---------- YouTube live section grabber ----------
+@app.post("/api/livedl/start")
+def api_livedl_start(req: LiveDlStartReq):
+    if req.end_t <= req.start_t:
+        raise HTTPException(400, "end_t must be > start_t")
+    if req.end_t - req.start_t < 5:
+        raise HTTPException(400, "section too short — minimum 5s")
+    cfg = req.model_dump()
+    cfg.pop("url", None)
+    try:
+        job = livedl_mod.start_download(req.url, cfg)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"failed to start: {e}")
+    _digest_event("clipper", "download_youtube_live", req.url,
+                  {"id": job.id, "quality": cfg.get("quality"),
+                   "start_t": req.start_t, "end_t": req.end_t})
+    return {"id": job.id, "status": job.status}
+
+@app.post("/api/livedl/probe-duration")
+def api_livedl_probe(req: LiveDlProbeReq):
+    """Probe a YT live URL via yt-dlp -J + Firefox cookies. Returns
+    {ok, is_live, now_s, title, diag}. Never throws — surfaces probe
+    failure as ok=False so the UI can render a soft error."""
+    return livedl_mod.probe_live_duration(req.url)
+
+
+@app.get("/api/livedl/status/{job_id}")
+def api_livedl_status(job_id: str):
+    job = livedl_mod.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "unknown livedl job")
+    return job.status_dict()
+
+@app.post("/api/livedl/stop/{job_id}")
+def api_livedl_stop(job_id: str):
+    ok = livedl_mod.stop_job(job_id)
+    if not ok:
+        raise HTTPException(404, "unknown livedl job")
+    return {"id": job_id, "status": "cancelled"}
+
+@app.get("/api/livedl/list")
+def api_livedl_list():
+    return {"jobs": livedl_mod.list_jobs()}
+
+@app.delete("/api/livedl/{job_id:path}")
+def api_livedl_delete(job_id: str):
+    ok = livedl_mod.delete_job(job_id)
+    if not ok:
+        raise HTTPException(404, "unknown or already deleted")
+    return {"deleted": job_id}
+
+
 @app.get("/downloads/{filename:path}")
 def serve_download(filename: str):
     # `/downloads/cuts/*` belongs to the cutter (separate root); dispatch
@@ -200,6 +277,12 @@ def serve_download(filename: str):
         p = cut_mod.CUTS_ROOT / filename[len("cuts/"):]
         if not p.exists(): raise HTTPException(404)
         return FileResponse(p, filename=Path(filename).name)
+    # Try live folder first (its mp4s have `_live_` in the stem so no
+    # collision with regular YouTube downloads), then fall through to the
+    # regular youtube/ root.
+    p_live = livedl_mod.DOWNLOADS_ROOT / filename
+    if p_live.exists():
+        return FileResponse(p_live, filename=filename)
     p = dl_mod.DOWNLOADS_ROOT / filename
     if not p.exists(): raise HTTPException(404)
     return FileResponse(p, filename=filename)
@@ -507,14 +590,12 @@ def api_cut_extract_audio(req: CutAudioReq):
 
 
 # ---------- Reveal in File Explorer ----------
-@app.post("/api/reveal")
-def api_reveal(url: str):
-    """Open the OS file manager focused on the given media file. The
-    `url` is the server-relative serve URL we already hand out (e.g.
-    `/insta/foo.mp4`) — we resolve it back to disk path under one of
-    the known roots, then call the platform-native reveal-in-folder.
-    Pure-cosmetic feature: failures are non-fatal, just return ok=False."""
-    import os, subprocess
+def _resolve_serve_url_to_disk(url: str):
+    """Map a serve-URL (e.g. `/downloads/<file>` or `/insta/<file>`) to
+    an on-disk Path under one of the known roots. Tries livedl folder
+    as fallback for `downloads/` prefix since live-mp4s share that
+    URL-namespace but live in a sibling folder. Returns Path or raises
+    HTTPException."""
     from urllib.parse import unquote
     url = unquote(url or "")
     if not url.startswith("/"):
@@ -523,9 +604,6 @@ def api_reveal(url: str):
     if len(parts) < 2:
         raise HTTPException(400, "bad url")
     prefix, rest = parts
-    # `cuts` lives under /downloads/cuts/ on the URL side, but on disk
-    # it's its own root (cut_mod.CUTS_ROOT). Strip the `cuts/` prefix
-    # from `rest` and dispatch to the cutter root in that case.
     if prefix == "downloads" and rest.startswith("cuts/"):
         prefix, rest = "cuts", rest[len("cuts/"):]
     roots = {
@@ -541,8 +619,28 @@ def api_reveal(url: str):
     media = (root / rest).resolve()
     try: media.relative_to(root.resolve())
     except ValueError: raise HTTPException(400, "path escape")
-    if not media.exists():
-        raise HTTPException(404, "media missing")
+    if media.exists():
+        return media
+    # Live downloads share the `/downloads/` URL prefix but live in a
+    # sibling folder (`youtube_live/`). Try that before giving up.
+    if prefix == "downloads":
+        alt = (livedl_mod.DOWNLOADS_ROOT / rest).resolve()
+        try: alt.relative_to(livedl_mod.DOWNLOADS_ROOT.resolve())
+        except ValueError: alt = None
+        if alt and alt.exists():
+            return alt
+    raise HTTPException(404, "media missing")
+
+
+@app.post("/api/reveal")
+def api_reveal(url: str):
+    """Open the OS file manager focused on the given media file. The
+    `url` is the server-relative serve URL we already hand out (e.g.
+    `/insta/foo.mp4`) — we resolve it back to disk path under one of
+    the known roots, then call the platform-native reveal-in-folder.
+    Pure-cosmetic feature: failures are non-fatal, just return ok=False."""
+    import os, subprocess
+    media = _resolve_serve_url_to_disk(url)
     try:
         if os.name == "nt":
             # Open the parent folder via the Windows shell — bulletproof
@@ -569,35 +667,7 @@ def api_thumb(url: str):
     `<stem>.thumb.jpg` and is hidden via attrib +H so it doesn't litter
     the user's File Explorer."""
     import core, subprocess
-    from urllib.parse import unquote
-    # Map serve-URL → on-disk path under one of the four roots.
-    url = unquote(url or "")
-    if not url.startswith("/"):
-        raise HTTPException(400, "url must be absolute path")
-    parts = url.lstrip("/").split("/", 1)
-    if len(parts) < 2:
-        raise HTTPException(400, "bad url")
-    prefix, rest = parts
-    # `cuts` lives under /downloads/cuts/ on the URL side, but on disk
-    # it's its own root (cut_mod.CUTS_ROOT). Strip the `cuts/` prefix
-    # from `rest` and dispatch to the cutter root in that case.
-    if prefix == "downloads" and rest.startswith("cuts/"):
-        prefix, rest = "cuts", rest[len("cuts/"):]
-    roots = {
-        "downloads": dl_mod.DOWNLOADS_ROOT,
-        "insta":     ig_mod.INSTA_ROOT,
-        "tiktok":    tt_mod.TIKTOK_ROOT,
-        "uploads":   up_mod.UPLOADS_ROOT,
-        "cuts":      cut_mod.CUTS_ROOT,
-    }
-    root = roots.get(prefix)
-    if root is None:
-        raise HTTPException(404, "unknown root")
-    media = (root / rest).resolve()
-    try: media.relative_to(root.resolve())
-    except ValueError: raise HTTPException(400, "path escape")
-    if not media.exists():
-        raise HTTPException(404, "media missing")
+    media = _resolve_serve_url_to_disk(url)
     # New filename suffix (`.thumb640.jpg`) makes old 240px cached thumbs
     # stale automatically — they sit next to a media file with the OLD
     # name, this lookup misses them and we regenerate at higher quality.

@@ -275,16 +275,22 @@ body {
 .toggle.on { background: var(--accent); }
 .toggle.on::after { transform: translateX(18px); background: var(--accent-ink); }
 
-/* Render bar — full-width primary CTA between form cards and Project Clips. */
+/* Render bar — full-width primary CTA between form cards and Project Clips.
+   Each tab supplies its own brand colour via `--tab-tint` / `--tab-ink`
+   inline style on the .render-bar element. Defaults fall back to the
+   global accent so the rules work outside the ingest tabs too. */
 .render-bar {
+  --tab-tint: var(--accent);
+  --tab-ink:  var(--accent-ink);
   display: flex; align-items: center; gap: 16px;
+  justify-content: space-between;
   margin: 18px 0;
   padding: 14px 18px;
   background:
     linear-gradient(90deg,
-      color-mix(in srgb, var(--accent) 12%, var(--card)) 0%,
+      color-mix(in srgb, var(--tab-tint) 12%, var(--card)) 0%,
       var(--card) 60%);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--tab-tint) 30%, var(--border));
   border-radius: var(--radius);
   box-shadow:
     var(--shadow-sm),
@@ -293,16 +299,16 @@ body {
 .render-bar-btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 12px 22px;
-  background: var(--accent); color: var(--accent-ink);
+  background: var(--tab-tint); color: var(--tab-ink);
   border: 0;
   border-radius: var(--radius-sm);
   font: 700 12.5px/1 var(--font-body);
   letter-spacing: .14em; text-transform: uppercase;
   cursor: pointer;
   box-shadow:
-    0 1px 0 color-mix(in srgb, var(--accent-ink) 18%, transparent) inset,
-    0 -1px 0 color-mix(in srgb, var(--accent) 50%, black 15%) inset,
-    0 6px 16px color-mix(in srgb, var(--accent) 22%, transparent);
+    0 1px 0 color-mix(in srgb, var(--tab-ink) 18%, transparent) inset,
+    0 -1px 0 color-mix(in srgb, var(--tab-tint) 50%, black 15%) inset,
+    0 6px 16px color-mix(in srgb, var(--tab-tint) 22%, transparent);
   transition: transform .14s, filter .14s;
 }
 .render-bar-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
@@ -897,7 +903,7 @@ button .material-symbols-outlined { font-size: 18px; }
   color: var(--text); letter-spacing: .02em;
   text-transform: uppercase;
 }
-#dlList, #upList, #igList, #ttList, #allList {
+#dlList, #upList, #igList, #ttList, #allList, #liveDlList {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
@@ -1900,6 +1906,9 @@ button .material-symbols-outlined { font-size: 18px; }
       <a class="nav-item tab active" data-tab="download" style="--nav-tint:#ff4d4f" onclick="switchTab('download'); dlOnTabOpen()">
         <span class="nav-icon"><span class="material-symbols-outlined">smart_display</span></span><span>YouTube</span>
       </a>
+      <a class="nav-item tab" data-tab="livedl" style="--nav-tint:#ff4d4f" onclick="switchTab('livedl'); liveDlOnTabOpen()">
+        <span class="nav-icon"><span class="material-symbols-outlined">live_tv</span></span><span>YouTube Стрим</span>
+      </a>
       <a class="nav-item tab" data-tab="insta" style="--nav-tint:#e1306c" onclick="switchTab('insta'); igOnTabOpen()">
         <span class="nav-icon"><span class="material-symbols-outlined">photo_camera</span></span><span>Instagram</span>
       </a>
@@ -1989,11 +1998,17 @@ button .material-symbols-outlined { font-size: 18px; }
           <div class="range-row">
             <div class="range-field">
               <span class="range-l">From</span>
-              <input id="dlRangeStart" type="text" placeholder="0:00:00" title="empty = from start; HH:MM:SS, MM:SS or seconds" onfocus="rangePrefill(this)">
+              <input id="dlRangeStart" type="text" placeholder="0:00:00" title="empty = from start; HH:MM:SS, MM:SS or seconds — digits auto-format"
+                     onfocus="rangePrefill(this)"
+                     oninput="autoFormatRangeInput(this, event)"
+                     onblur="normalizeRangeInput(this)">
             </div>
             <div class="range-field">
               <span class="range-l">To</span>
-              <input id="dlRangeEnd" type="text" placeholder="till end" title="empty = till end; HH:MM:SS, MM:SS or seconds" onfocus="rangePrefill(this)">
+              <input id="dlRangeEnd" type="text" placeholder="till end" title="empty = till end; HH:MM:SS, MM:SS or seconds — digits auto-format"
+                     onfocus="rangePrefill(this)"
+                     oninput="autoFormatRangeInput(this, event)"
+                     onblur="normalizeRangeInput(this)">
             </div>
           </div>
         </section>
@@ -2111,12 +2126,12 @@ button .material-symbols-outlined { font-size: 18px; }
 
       <button id="dlStartBtn" onclick="dlStart()" style="display:none"></button>
 
-      <div class="render-bar">
+      <div class="render-bar" style="--tab-tint:#ff4d4f; --tab-ink:#1a0303">
+        <span class="render-bar-hint render-hint-text">YouTube · ready</span>
         <button class="render-bar-btn" type="button" onclick="runActiveTab()">
           <span class="material-symbols-outlined">play_arrow</span>
           <span>Render Now</span>
         </button>
-        <span class="render-bar-hint render-hint-text">YouTube · ready</span>
       </div>
 
       <div class="files-section">
@@ -2128,6 +2143,140 @@ button .material-symbols-outlined { font-size: 18px; }
           </div>
         </div>
         <div id="dlList"></div>
+      </div>
+    </div>
+
+    <!-- ============ YOUTUBE LIVE TAB ============ -->
+    <div id="tab-livedl" class="tab-page" style="display:none">
+      <div class="page-head">
+        <h1 class="page-title">YouTube Стрим</h1>
+        <div class="page-sub">Pull a section out of a currently-running YouTube live stream. Type either absolute timecodes (<span class="mono">2:15:15</span>) or YT-style time-behind-live (<span class="mono">-38:12</span>) — both work once the snapshot below captures stream length. YT throttles live-DVR ≈ 2× real-time (a 20-min window ≈ 10 min download).</div>
+      </div>
+
+      <!-- Snapshot indicator: filled after probe-duration succeeds. The
+           "now_s" shown here is THE anchor for -MM:SS inputs below. -->
+      <div id="liveDlSnap"
+           style="display:none; margin-bottom:16px; padding:10px 14px;
+                  border-radius:10px; background:var(--bg-2);
+                  border:1px solid var(--border);
+                  align-items:center; gap:12px; flex-wrap:wrap">
+        <span id="liveDlSnapIcon" style="font-size:18px">🔴</span>
+        <div style="flex:1; min-width:200px">
+          <div id="liveDlSnapTitle" class="mono"
+               style="font-size:14px; font-weight:600"></div>
+          <div id="liveDlSnapMeta" class="hint"
+               style="margin-top:2px; font-size:12px"></div>
+        </div>
+        <button id="liveDlRefreshBtn" type="button" class="ghost tiny"
+                onclick="liveDlProbe(true)"
+                title="перепробить длину стрима">⟳ обновить</button>
+      </div>
+
+      <div class="form-grid">
+        <section class="card">
+          <div class="card-eyebrow"><span class="material-symbols-outlined">link</span>Ingest Stream / URL</div>
+          <div class="range-field" style="margin: auto 0">
+            <span class="range-l">URL</span>
+            <input id="liveDlUrl" type="text"
+                   placeholder="https://www.youtube.com/watch?v=… (live stream)"
+                   oninput="liveDlOnUrl()"
+                   onpaste="setTimeout(liveDlOnUrl, 0)">
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-eyebrow"><span class="material-symbols-outlined">content_cut</span>Range Selection</div>
+          <div class="range-row">
+            <div class="range-field">
+              <span class="range-l">From</span>
+              <input id="liveDlRangeStart" type="text" placeholder="2:15:15 or -38:12"
+                     title="absolute (2:15:15) OR YT-style behind-live (-38:12). Negative needs URL snapshot above."
+                     onfocus="rangePrefill(this)"
+                     oninput="liveDlOnRangeInput(this, event)"
+                     onblur="normalizeRangeInput(this); liveDlUpdateReadout();">
+            </div>
+            <div class="range-field">
+              <span class="range-l">To</span>
+              <input id="liveDlRangeEnd" type="text" placeholder="2:15:20 or -30:00"
+                     title="absolute (2:15:20) OR YT-style behind-live (-30:00). Negative needs URL snapshot above."
+                     onfocus="rangePrefill(this)"
+                     oninput="liveDlOnRangeInput(this, event)"
+                     onblur="normalizeRangeInput(this); liveDlUpdateReadout();">
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Resolved-absolute readout. Shows what's about to be sent to
+           the backend BEFORE clicking Download Now — no surprises. -->
+      <div id="liveDlReadout" class="hint mono"
+           style="margin-top:8px; padding:8px 12px; border-radius:8px;
+                  background:rgba(255,255,255,0.04); min-height:20px;
+                  font-size:12px"></div>
+
+      <div class="form-grid">
+        <section class="card">
+          <div class="card-eyebrow"><span class="material-symbols-outlined">tune</span>Quality</div>
+          <div class="card-tiles" data-target="liveDlQuality">
+            <button type="button" class="tile" data-v="720">720p</button>
+            <button type="button" class="tile" data-v="1080">1080p</button>
+            <button type="button" class="tile" data-v="1440">1440p</button>
+            <button type="button" class="tile" data-v="2160">2160p</button>
+            <button type="button" class="tile" data-v="best">Best</button>
+          </div>
+          <select id="liveDlQuality" style="display:none">
+            <option value="720">720</option>
+            <option value="1080" selected>1080</option>
+            <option value="1440">1440</option>
+            <option value="2160">2160</option>
+            <option value="best">best</option>
+          </select>
+        </section>
+
+        <section class="card">
+          <div class="card-eyebrow"><span class="material-symbols-outlined">info</span>Notes</div>
+          <div style="padding:10px 14px; font-size:13px; color:var(--text-muted)">
+            <strong>Auth:</strong> uses Firefox YT cookies (профиль <span class="mono">CS_2_Analytics</span>) — Chrome 127+ ABE encryption breaks yt-dlp/streamlink reads, Firefox works.<br>
+            <strong>Output:</strong> raw mp4 в <span class="mono">downloads/youtube_live/</span>. Дальше режь через таб Cut.
+          </div>
+        </section>
+      </div>
+
+      <button id="liveDlStartBtn" onclick="liveDlStart()" style="display:none"></button>
+
+      <div class="render-bar" style="--tab-tint:#ff4d4f; --tab-ink:#1a0303">
+        <span class="render-bar-hint render-hint-text">YouTube Live · ready</span>
+        <button class="render-bar-btn" type="button" onclick="runActiveTab()">
+          <span class="material-symbols-outlined">play_arrow</span>
+          <span>Download Now</span>
+        </button>
+      </div>
+
+      <!-- Active job indicator -->
+      <div id="liveDlActiveJob" style="display:none; margin-top:18px; padding:14px 16px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+        <div style="display:flex; gap:10px; align-items:baseline; margin-bottom:8px">
+          <div id="liveDlActiveBar" style="width:8px; height:8px; border-radius:99px; background:var(--accent)"></div>
+          <div id="liveDlActiveStatus" class="mono" style="font-weight:600">queued</div>
+          <div id="liveDlActiveElapsed" class="mono" style="margin-left:auto; color:var(--text-muted); font-size:12px"></div>
+          <button class="ghost tiny" type="button" onclick="liveDlStop()">⏹ Стоп</button>
+        </div>
+        <div id="liveDlActiveDetail" class="mono" style="font-size:12px; color:var(--text-muted); margin-bottom:8px"></div>
+        <div style="height:6px; background:rgba(255,255,255,0.05); border-radius:99px; overflow:hidden">
+          <div id="liveDlActiveProgress" style="height:100%; width:0%;
+                background:linear-gradient(90deg, #ff4d4f, #ff6b6b);
+                transition:width 0.4s ease"></div>
+        </div>
+      </div>
+
+      <div class="files-section">
+        <div class="files-head">
+          <div class="files-title">Live Sections</div>
+          <div style="display:flex; gap:8px">
+            <button class="ghost tiny" onclick="liveDlRefreshList()">Refresh</button>
+            <button class="danger tiny" onclick="liveDlDeleteAll()">Delete All</button>
+          </div>
+        </div>
+        <div id="liveDlList"></div>
       </div>
     </div>
 
@@ -2165,12 +2314,12 @@ button .material-symbols-outlined { font-size: 18px; }
 
       <button id="igStartBtn" onclick="igStart()" style="display:none"></button>
 
-      <div class="render-bar">
+      <div class="render-bar" style="--tab-tint:#e1306c; --tab-ink:#ffffff">
+        <span class="render-bar-hint render-hint-text">Instagram · ready</span>
         <button class="render-bar-btn" type="button" onclick="runActiveTab()">
           <span class="material-symbols-outlined">play_arrow</span>
           <span>Render Now</span>
         </button>
-        <span class="render-bar-hint render-hint-text">Instagram · ready</span>
       </div>
 
       <div class="files-section">
@@ -2219,12 +2368,12 @@ button .material-symbols-outlined { font-size: 18px; }
 
       <button id="ttStartBtn" onclick="ttStart()" style="display:none"></button>
 
-      <div class="render-bar">
+      <div class="render-bar" style="--tab-tint:#25f4ee; --tab-ink:#02201f">
+        <span class="render-bar-hint render-hint-text">TikTok · ready</span>
         <button class="render-bar-btn" type="button" onclick="runActiveTab()">
           <span class="material-symbols-outlined">play_arrow</span>
           <span>Render Now</span>
         </button>
-        <span class="render-bar-hint render-hint-text">TikTok · ready</span>
       </div>
 
       <div class="files-section">
@@ -2275,11 +2424,11 @@ button .material-symbols-outlined { font-size: 18px; }
       <button id="upStartBtn" onclick="upStart()" style="display:none"></button>
 
       <div class="render-bar">
+        <span class="render-bar-hint render-hint-text">Upload · ready</span>
         <button class="render-bar-btn" type="button" onclick="runActiveTab()">
           <span class="material-symbols-outlined">play_arrow</span>
           <span>Process Now</span>
         </button>
-        <span class="render-bar-hint render-hint-text">Upload · ready</span>
       </div>
 
       <div class="files-section">
@@ -2560,7 +2709,35 @@ function switchTab(t) {
   ALL(".tab").forEach(el => el.classList.toggle("active", el.dataset.tab === t));
   ALL(".tab-page").forEach(el => el.style.display = "none");
   $("#tab-" + t).style.display = "block";
+  // Persist so page reload restores the same workspace.
+  try { localStorage.setItem("clipperActiveTab", t); } catch (e) {}
 }
+
+// On first paint, restore the workspace the user was on last session.
+// Unknown / missing key falls back to the default-active tab in the HTML
+// (the YouTube nav-item with class "tab active").
+(function restoreClipperLastTab() {
+  const ALLOWED = new Set(["download","livedl","insta","tiktok","upload","all","cut"]);
+  let saved = null;
+  try { saved = localStorage.getItem("clipperActiveTab"); } catch (e) {}
+  if (!saved || !ALLOWED.has(saved)) return;
+  // Default tab is "download" — no need to flip anything.
+  if (saved === "download") return;
+  document.addEventListener("DOMContentLoaded", () => {
+    switchTab(saved);
+    // Re-fire the same *OnTabOpen hook the inline onclick handler would have called.
+    const onOpenMap = {
+      livedl: () => typeof liveDlOnTabOpen === "function" && liveDlOnTabOpen(),
+      insta:  () => typeof igOnTabOpen     === "function" && igOnTabOpen(),
+      tiktok: () => typeof ttOnTabOpen     === "function" && ttOnTabOpen(),
+      upload: () => typeof upOnTabOpen     === "function" && upOnTabOpen(),
+      all:    () => typeof allOnTabOpen    === "function" && allOnTabOpen(),
+      cut:    () => typeof cutOnTabOpen    === "function" && cutOnTabOpen(),
+    };
+    const fn = onOpenMap[saved];
+    if (fn) fn();
+  });
+})();
 
 /* ============ WATERMARK MODULE ============
    One library on disk, four ingest tabs share it. Each tab gets the
@@ -2862,6 +3039,54 @@ function rangePrefill(el) {
   setTimeout(() => el.select(), 0);
 }
 
+// Auto-format range-input as user types digits. "03233" → "0:32:33",
+// "3812" → "38:12". Only triggers on insertText* events so backspace /
+// delete leave the value untouched and editing still feels natural.
+function autoFormatRangeInput(el, event) {
+  const it = event && event.inputType;
+  if (!it || !it.startsWith("insertText")) return;
+  let raw = String(el.value || "");
+  // Preserve a leading minus — YT-style "-7:00" = 7 min behind live edge.
+  // Without this, `\D` strips the sign and "-7:00" silently becomes "7:00"
+  // (= 7 min from broadcast start, exactly the wrong end).
+  const negative = raw.trimStart().startsWith("-");
+  let digits = raw.replace(/\D/g, "");
+  if (!digits) { el.value = negative ? "-" : ""; return; }
+  digits = digits.slice(0, 6);  // cap at HH MM SS
+  let formatted;
+  if (digits.length <= 2) {
+    formatted = digits;  // leave raw under 3 digits; normalize on blur
+  } else if (digits.length <= 4) {
+    formatted = `${digits.slice(0, -2)}:${digits.slice(-2)}`;
+  } else {
+    formatted = `${digits.slice(0, -4)}:${digits.slice(-4, -2)}:${digits.slice(-2)}`;
+  }
+  if (negative) formatted = "-" + formatted;
+  el.value = formatted;
+  try { el.setSelectionRange(formatted.length, formatted.length); } catch (e) {}
+}
+
+// On-blur normalize (covers the under-3-digits case): "38" → "0:38",
+// "1" → "0:01". Existing colon-formatted input untouched.
+function normalizeRangeInput(el) {
+  if (!el) return;
+  let raw = String(el.value || "").trim();
+  if (!raw) return;
+  const negative = raw.startsWith("-");
+  if (raw.includes(":")) return;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return;
+  const sign = negative ? "-" : "";
+  if (digits.length <= 2) {
+    el.value = `${sign}0:${digits.padStart(2, "0")}`;
+  } else if (digits.length <= 4) {
+    el.value = `${sign}${parseInt(digits.slice(0, -2), 10)}:${digits.slice(-2)}`;
+  } else {
+    const six = digits.slice(0, 6);
+    el.value = `${sign}${parseInt(six.slice(0, -4), 10)}:${six.slice(-4, -2)}:${six.slice(-2)}`;
+  }
+}
+
 function parseTime(s) {
   if (s == null) return null;
   s = String(s).trim();
@@ -2963,6 +3188,7 @@ const dlDeleteAll = () => deleteAllIn("download", "files",  dlRefreshList);
 const upDeleteAll = () => deleteAllIn("upload",   "uploads", upRefreshList);
 const igDeleteAll = () => deleteAllIn("insta",    "reels",  igRefreshList);
 const ttDeleteAll = () => deleteAllIn("tiktok",   "videos", ttRefreshList);
+const liveDlDeleteAll = () => deleteAllIn("livedl", "live sections", liveDlRefreshList);
 
 // Shared file-card renderer — used by all four list views so they get
 // the same look (thumbnail + name + buttons) and bug fixes propagate.
@@ -3217,6 +3443,388 @@ function dlPickActiveFromList() {
       ["downloading", "queued", "transcribing", "burning", "reformatting"].includes(x.status));
     if (active && !DL_ACTIVE_ID) { DL_ACTIVE_ID = active.id; dlPollStart(); }
   }).catch(() => {});
+}
+
+// ---------- YouTube Live tab ----------
+let LIVE_DL_TIMER = null;
+let LIVE_DL_ACTIVE_ID = null;
+let LIVE_DL_STARTED_AT = 0;
+// Snapshot of stream now_s captured via POST /api/livedl/probe-duration
+// — used to resolve YT-style -MM:SS time-behind-live inputs to absolute
+// stream seconds. Stays fixed until user hits ⟳, so the readout shows
+// exactly what will reach the backend (no race with the live edge).
+let LIVE_DL_SNAP = null;     // { url, now_s, title, captured_at, error?, is_live? }
+let LIVE_DL_PROBE_TOKEN = 0; // cancel stale probes when URL changes
+let _liveDlUrlTimer = null;
+
+function liveDlOnTabOpen() {
+  liveDlRefreshList();
+  liveDlPickActiveFromList();
+}
+
+// Debounced URL handler: paste / type → ~400 ms after settle, fire
+// probe-duration so the snapshot panel + readout are populated before
+// the user starts typing From/To.
+function liveDlOnUrl() {
+  const url = ($("#liveDlUrl")?.value || "").trim();
+  if (LIVE_DL_SNAP && LIVE_DL_SNAP.url !== url) {
+    LIVE_DL_SNAP = null;
+    liveDlRenderSnap();
+    liveDlUpdateReadout();
+  }
+  if (_liveDlUrlTimer) clearTimeout(_liveDlUrlTimer);
+  if (!url) return;
+  _liveDlUrlTimer = setTimeout(() => liveDlProbe(false), 400);
+}
+
+async function liveDlProbe(forceRefresh) {
+  const url = ($("#liveDlUrl")?.value || "").trim();
+  if (!url) return;
+  if (!forceRefresh && LIVE_DL_SNAP && LIVE_DL_SNAP.url === url && LIVE_DL_SNAP.now_s) return;
+  const token = ++LIVE_DL_PROBE_TOKEN;
+  LIVE_DL_SNAP = { url, now_s: null, title: null, probing: true };
+  liveDlRenderSnap();
+  try {
+    const r = await fetch("/api/livedl/probe-duration", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ url }),
+    });
+    const j = await r.json();
+    if (token !== LIVE_DL_PROBE_TOKEN) return;
+    if (!r.ok || !j.ok || !j.now_s) {
+      const why = (j && j.diag && j.diag.error) ? j.diag.error
+                : (j && j.detail) ? j.detail
+                : "не смог прочитать стрим";
+      LIVE_DL_SNAP = { url, error: why, is_live: j ? !!j.is_live : false };
+    } else {
+      LIVE_DL_SNAP = { url, now_s: j.now_s, title: j.title || null,
+                       captured_at: Date.now() };
+    }
+  } catch (e) {
+    if (token !== LIVE_DL_PROBE_TOKEN) return;
+    LIVE_DL_SNAP = { url, error: String(e && e.message || e) };
+  }
+  liveDlRenderSnap();
+  liveDlUpdateReadout();
+}
+
+function liveDlRenderSnap() {
+  const box = $("#liveDlSnap");
+  if (!box) return;
+  if (!LIVE_DL_SNAP) { box.style.display = "none"; return; }
+  box.style.display = "flex";
+  const icon = $("#liveDlSnapIcon");
+  const title = $("#liveDlSnapTitle");
+  const meta = $("#liveDlSnapMeta");
+  const refreshBtn = $("#liveDlRefreshBtn");
+  const snap = LIVE_DL_SNAP;
+  if (snap.probing) {
+    icon.textContent = "⏳";
+    title.textContent = "пробую стрим…";
+    meta.textContent = "yt-dlp читает метадату";
+    refreshBtn.style.display = "none";
+    return;
+  }
+  if (snap.error) {
+    icon.textContent = "❌";
+    title.textContent = "ошибка: " + snap.error;
+    meta.textContent = snap.is_live === false
+      ? "это не идущий live-стрим"
+      : "проверь ссылку или жми ⟳";
+    refreshBtn.style.display = "inline-block";
+    return;
+  }
+  icon.textContent = "🔴";
+  title.innerHTML = `Стрим идёт уже <span style="color:#ff4d4f">${liveDlFmtHms(snap.now_s)}</span>`;
+  const ageS = Math.round((Date.now() - snap.captured_at) / 1000);
+  const staleness = ageS < 60 ? `снапшот ${ageS}с назад`
+                  : ageS < 180 ? `снапшот ${Math.round(ageS/60)}мин назад`
+                  : `⚠ снапшоту ${Math.round(ageS/60)}мин — жми ⟳`;
+  meta.textContent = `${(snap.title || "live").slice(0, 80)} · ${staleness}`;
+  refreshBtn.style.display = "inline-block";
+}
+
+// Re-paint snapshot age every 15 s so "снапшот Nмин назад" stays honest
+// without polling the backend.
+setInterval(() => {
+  if (LIVE_DL_SNAP && LIVE_DL_SNAP.captured_at) liveDlRenderSnap();
+}, 15000);
+
+function liveDlFmtHms(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return "—";
+  const total = Math.round(sec);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = n => n.toString().padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function liveDlFmtDurShort(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return "—";
+  const total = Math.round(sec);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h) return `${h}h${m ? m.toString().padStart(2,"0") + "m" : ""}`;
+  if (m) return `${m}m${s ? s.toString().padStart(2,"0") + "s" : ""}`;
+  return `${s}s`;
+}
+
+// Dual-format time parser: absolute "2:15:15" via parseTime, OR YT-style
+// "-38:12" / "-1:00:00" (time-behind-live) resolved against LIVE_DL_SNAP.
+// Returns absolute stream-seconds, or null if input can't be resolved.
+function parseLiveDlTime(raw) {
+  if (raw == null) return null;
+  // Normalize all unicode minuses (U+2212 −, U+2013 –, U+2014 —, U+FE63 ﹣,
+  // U+FF0D −) to ASCII '-'. YT player text and some keyboards substitute
+  // these and our `startsWith("-")` check silently misclassifies them as
+  // absolute time → clip is taken from match start instead of behind-live.
+  let s = String(raw).trim().replace(/[−–—﹣－]/g, "-");
+  if (!s) return null;
+  if (s.startsWith("-")) {
+    // Time-behind-live — needs snapshot to anchor.
+    if (!LIVE_DL_SNAP || !LIVE_DL_SNAP.now_s) return null;
+    const behind = parseTime(s.slice(1).trim());
+    if (behind == null || behind < 0) return null;
+    return Math.max(0, LIVE_DL_SNAP.now_s - behind);
+  }
+  // Absolute — reuse existing parser (handles HH:MM:SS / MM:SS / seconds).
+  return parseTime(s);
+}
+
+// `oninput` for Range fields — combines digit-autoformat, snapshot
+// readout refresh, and a side effect to renderHintRefresh (which was
+// already wired through rightPreviewBind in Phase 1).
+function liveDlOnRangeInput(el, event) {
+  // Normalize unicode-minuses to ASCII '-' as the user types (paste from
+  // YT player can land any of U+2212 / U+2013 / U+2014).
+  if (el.value && /[−–—﹣－]/.test(el.value)) {
+    const fixed = el.value.replace(/[−–—﹣－]/g, "-");
+    if (fixed !== el.value) {
+      el.value = fixed;
+      try { el.setSelectionRange(fixed.length, fixed.length); } catch (e) {}
+    }
+  }
+  // Don't auto-format negative-prefix inputs (user is typing -MM:SS).
+  if (!String(el.value || "").trim().startsWith("-")) {
+    autoFormatRangeInput(el, event);
+  }
+  liveDlUpdateReadout();
+}
+
+// Show the resolved absolute window under the inputs. Surfaces any
+// parse / order / snapshot-missing problems BEFORE the user clicks.
+function liveDlUpdateReadout() {
+  const root = $("#liveDlReadout");
+  if (!root) return;
+  const startRaw = ($("#liveDlRangeStart")?.value || "").trim();
+  const endRaw = ($("#liveDlRangeEnd")?.value || "").trim();
+  const setTxt = (html, isErr) => {
+    root.innerHTML = html;
+    root.style.color = isErr ? "#ff6b6b" : "";
+  };
+  if (!startRaw && !endRaw) { setTxt(""); return; }
+  const sNeg = startRaw.startsWith("-");
+  const eNeg = endRaw.startsWith("-");
+  const needSnap = sNeg || eNeg;
+  if (needSnap && !(LIVE_DL_SNAP && LIVE_DL_SNAP.now_s)) {
+    setTxt("для <span class='mono'>-MM:SS</span> нужен снапшот — вставь URL выше", true);
+    return;
+  }
+  const startAbs = parseLiveDlTime(startRaw);
+  const endAbs = parseLiveDlTime(endRaw);
+  if (startAbs == null || endAbs == null) {
+    setTxt("формат: <span class='mono'>2:15:15</span> (абсолют) или <span class='mono'>-38:12</span> (как у YT)", true);
+    return;
+  }
+  if (endAbs <= startAbs) {
+    setTxt("«до» должно быть позже «с»", true);
+    return;
+  }
+  const span = endAbs - startAbs;
+  if (span < 5) {
+    setTxt(`кусок ${span}s — слишком короткий, минимум 5s`, true);
+    return;
+  }
+  setTxt(
+    `выбрано: <strong>с ${liveDlFmtHms(startAbs)} до ${liveDlFmtHms(endAbs)}</strong>` +
+    ` от начала стрима (${liveDlFmtDurShort(span)})`
+  );
+}
+
+async function liveDlStart() {
+  const url = $("#liveDlUrl").value.trim();
+  if (!url) { toast("URL required", "paste a live YouTube link", "err"); return; }
+  const startRaw = $("#liveDlRangeStart").value.trim();
+  const endRaw = $("#liveDlRangeEnd").value.trim();
+  if (!startRaw || !endRaw) {
+    toast("Range invalid", "From / To required", "err");
+    return;
+  }
+  // Dual-format parser: absolute (2:15:15) OR YT-style behind-live (-38:12).
+  // For negative inputs ALWAYS re-probe to get a fresh now_s — otherwise
+  // a stale snapshot from when the URL was first pasted means "-0:07:00"
+  // gets resolved against a now_s that's 30 min behind reality, and the
+  // download lands somewhere completely random.
+  const startNorm = startRaw.replace(/[−–—﹣－]/g, "-");
+  const endNorm   = endRaw.replace(/[−–—﹣－]/g, "-");
+  const needFresh = startNorm.startsWith("-") || endNorm.startsWith("-");
+  if (needFresh) {
+    toast("Probing live edge…", "обновляю snapshot чтобы -MM:SS считался от текущего момента");
+    await liveDlProbe(true);  // force re-probe
+    if (!LIVE_DL_SNAP || !LIVE_DL_SNAP.now_s) {
+      toast("Probe failed", LIVE_DL_SNAP?.error || "не смог получить длину стрима", "err");
+      return;
+    }
+  }
+  const startT = parseLiveDlTime(startRaw);
+  const endT = parseLiveDlTime(endRaw);
+  if (startT == null || endT == null) {
+    toast("Range invalid", "format: 2:15:15 (абсолют) или -38:12 (как у YT)", "err");
+    return;
+  }
+  if (endT <= startT) {
+    toast("Range invalid", "To must be > From", "err");
+    return;
+  }
+  if (endT - startT < 5) {
+    toast("Range too short", "minimum 5 seconds", "err");
+    return;
+  }
+  const body = {
+    url,
+    quality:  $("#liveDlQuality").value,
+    start_t:  startT,
+    end_t:    endT,
+    frontend_now_s: (LIVE_DL_SNAP && LIVE_DL_SNAP.now_s) || null,
+    frontend_captured_ms: (LIVE_DL_SNAP && LIVE_DL_SNAP.captured_at) || null,
+  };
+  $("#liveDlStartBtn").disabled = true;
+  try {
+    const r = await fetch("/api/livedl/start", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "error");
+    LIVE_DL_ACTIVE_ID = j.id;
+    LIVE_DL_STARTED_AT = Date.now();
+    $("#liveDlActiveJob").style.display = "block";
+    liveDlPollStart();
+    scrollToActive("liveDlActiveJob");
+    toast("Live download started", `${formatHms(startT)}–${formatHms(endT)}`);
+  } catch (e) {
+    toast("Failed", e.message, "err");
+  } finally {
+    $("#liveDlStartBtn").disabled = false;
+  }
+}
+
+async function liveDlStop() {
+  if (!LIVE_DL_ACTIVE_ID) return;
+  try {
+    await fetch(`/api/livedl/stop/${encodeURIComponent(LIVE_DL_ACTIVE_ID)}`,
+                 {method:"POST"});
+  } catch (e) {}
+  await liveDlTick();
+}
+
+function liveDlPollStart() {
+  if (LIVE_DL_TIMER) clearInterval(LIVE_DL_TIMER);
+  LIVE_DL_TIMER = setInterval(liveDlTick, 1000);
+  liveDlTick();
+}
+function liveDlPollStop() {
+  if (LIVE_DL_TIMER) { clearInterval(LIVE_DL_TIMER); LIVE_DL_TIMER = null; }
+}
+
+async function liveDlTick() {
+  if (!LIVE_DL_ACTIVE_ID) { liveDlPollStop(); return; }
+  try {
+    const r = await fetch(`/api/livedl/status/${encodeURIComponent(LIVE_DL_ACTIVE_ID)}`);
+    if (!r.ok) { liveDlPollStop(); $("#liveDlActiveJob").style.display = "none"; return; }
+    const j = await r.json();
+    liveDlRenderActive(j);
+    if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
+      await liveDlRefreshList();
+      if (j.status === "done") toast("Done", j.title || j.file_name || "", "good");
+      else if (j.status === "failed") toast("Failed", j.error || "", "err");
+      else if (j.status === "cancelled") toast("Cancelled", "", "warn");
+      setTimeout(() => {
+        if (LIVE_DL_ACTIVE_ID === j.id) {
+          $("#liveDlActiveJob").style.display = "none";
+          LIVE_DL_ACTIVE_ID = null;
+        }
+      }, 4000);
+      liveDlPollStop();
+    }
+  } catch (e) {
+    console.warn("liveDlTick:", e);
+  }
+}
+
+function liveDlRenderActive(j) {
+  const statusMap = {
+    queued: "⏳ queued",
+    downloading: "⬇ downloading",
+    transmuxing: "🎬 transmuxing",
+    done: "✓ done",
+    failed: "❌ failed",
+    cancelled: "⏹ cancelled",
+  };
+  $("#liveDlActiveStatus").textContent = statusMap[j.status] || j.status;
+  $("#liveDlActiveDetail").textContent = j.phase_msg || "";
+  $("#liveDlActiveProgress").style.width = (j.progress_pct || 0) + "%";
+  // Elapsed
+  const ms = Date.now() - LIVE_DL_STARTED_AT;
+  if (ms > 0) {
+    const s = Math.floor(ms / 1000);
+    const txt = s < 60 ? `${s}s`
+              : s < 3600 ? `${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s`
+              : `${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,"0")}m`;
+    $("#liveDlActiveElapsed").textContent = "⏱ " + txt;
+  }
+}
+
+async function liveDlRefreshList() {
+  try {
+    const r = await fetch("/api/livedl/list");
+    const j = await r.json();
+    const root = $("#liveDlList");
+    if (!j.jobs.length) { root.innerHTML = emptyState("no live sections yet"); return; }
+    root.innerHTML = j.jobs.map(it => renderFileCard(it, "youtube", "liveDlDelete")).join("");
+  } catch (e) { console.warn("liveDlRefreshList:", e); }
+}
+
+async function liveDlDelete(jobId) {
+  if (!await confirmModal("Delete file from disk?")) return;
+  try {
+    await fetch(`/api/livedl/${encodeURIComponent(jobId)}`, {method:"DELETE"});
+    await liveDlRefreshList();
+  } catch(e) {}
+}
+
+function liveDlPickActiveFromList() {
+  fetch("/api/livedl/list").then(r => r.json()).then(j => {
+    const active = (j.jobs || []).find(x =>
+      ["downloading", "queued", "transmuxing"].includes(x.status));
+    if (active && !LIVE_DL_ACTIVE_ID) {
+      LIVE_DL_ACTIVE_ID = active.id;
+      LIVE_DL_STARTED_AT = (active.started_at || Math.floor(Date.now()/1000)) * 1000;
+      $("#liveDlActiveJob").style.display = "block";
+      liveDlPollStart();
+    }
+  }).catch(() => {});
+}
+
+function formatHms(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = n => n.toString().padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 // ---------- Upload tab ----------
@@ -4993,7 +5601,8 @@ function rightPreviewRefresh() {
 // canvas AND the Render-bar enabled state.
 function rightPreviewBind() {
   const refreshBoth = () => { rightPreviewRefresh(); renderHintRefresh(); };
-  ["dlUrl","igUrl","ttUrl"].forEach(id => {
+  ["dlUrl","igUrl","ttUrl",
+   "liveDlUrl","liveDlRangeStart","liveDlRangeEnd"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", refreshBoth);
   });
@@ -5025,6 +5634,16 @@ function renderReadiness() {
       const v = (document.getElementById("dlUrl")?.value || "").trim();
       ready = v.length > 4;
       reason = ready ? "ready" : "paste URL";
+      break;
+    }
+    case "livedl": {
+      const v = (document.getElementById("liveDlUrl")?.value || "").trim();
+      const s = (document.getElementById("liveDlRangeStart")?.value || "").trim();
+      const e = (document.getElementById("liveDlRangeEnd")?.value || "").trim();
+      ready = v.length > 4 && s.length > 0 && e.length > 0;
+      reason = !v ? "paste URL"
+             : (!s || !e) ? "set From/To"
+             : "ready";
       break;
     }
     case "insta": {
@@ -5178,6 +5797,7 @@ function runActiveTab() {
   const tab = active.dataset.tab;
   const map = {
     download: () => typeof dlStart === "function" && dlStart(),
+    livedl:   () => typeof liveDlStart === "function" && liveDlStart(),
     insta:    () => typeof igStart === "function" && igStart(),
     tiktok:   () => typeof ttStart === "function" && ttStart(),
     upload:   () => typeof upStart === "function" && upStart(),
