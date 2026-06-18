@@ -924,13 +924,21 @@ button .material-symbols-outlined { font-size: 18px; }
 .modal-bg {
   position: fixed; inset: 0; background: rgba(13, 15, 13, .85);
   backdrop-filter: blur(6px);
-  z-index: 1000; overflow-y: auto;
+  z-index: 1000;
   padding: 30px 16px;
+  /* flex-center the card both axes — short confirm dialogs no longer
+     get glued to the top of the viewport. Long modals (idea, watermark
+     library) fall back to overflow-y on the card itself, see below. */
   display: none;
+  align-items: center;
+  justify-content: center;
 }
-.modal-bg.open { display: block; }
+.modal-bg.open { display: flex; }
 .modal-card {
-  max-width: 720px; margin: 0 auto;
+  max-width: 720px;
+  width: 100%;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -949,10 +957,20 @@ button .material-symbols-outlined { font-size: 18px; }
 }
 
 /* ============ TOASTS ============ */
+/* Right pane (preview/overlays) is 320px (300px on ≤1400px) and lives
+   along the right viewport edge. Toasts must sit to the LEFT of that
+   pane so they don't visually crash into it. At ≤1180px the right pane
+   is hidden — toasts hug the viewport edge as usual. */
 #toasts {
-  position: fixed; right: 24px; bottom: 24px; z-index: 2000;
+  position: fixed; right: 344px; bottom: 24px; z-index: 2000;
   display: flex; flex-direction: column; gap: 10px;
   pointer-events: none;
+}
+@media (max-width: 1400px) {
+  #toasts { right: 324px; }
+}
+@media (max-width: 1180px) {
+  #toasts { right: 24px; }
 }
 .toast {
   pointer-events: auto;
@@ -964,12 +982,18 @@ button .material-symbols-outlined { font-size: 18px; }
   box-shadow: var(--shadow-lg);
   animation: toast-in .25s ease-out;
   color: var(--text); font-size: 13px;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .toast.good { border-left-color: var(--good); }
 .toast.warn { border-left-color: var(--warn); }
 .toast.err  { border-left-color: var(--err);  }
 .toast .toast-title { font-weight: 700; margin-bottom: 3px; letter-spacing: .02em; }
-.toast .toast-sub   { color: var(--text-soft); font-size: 11.5px; font-family: var(--font-mono); }
+.toast .toast-sub   {
+  color: var(--text-soft); font-size: 11.5px; font-family: var(--font-mono);
+  overflow-wrap: anywhere; word-break: break-all;
+}
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px) scale(.98); }
   to   { opacity: 1; transform: translateY(0)   scale(1); }
@@ -4443,6 +4467,10 @@ function _ideaRenderScout(d) {
   document.getElementById("ideaScoutMeta").textContent = meta;
   document.getElementById("ideaScoutText").textContent = d.scout_text || "(empty)";
   document.getElementById("ideaAngle").value = "";
+  // Cache scout PART A + B so /api/caption/generate sees what options
+  // the user was choosing from (otherwise a single-letter angle like
+  // "а" is meaningless context for Lalo).
+  if (IDEA_CTX) IDEA_CTX._scout_text = d.scout_text || "";
   _ideaShowStage("scout");
   setTimeout(() => document.getElementById("ideaAngle").focus(), 60);
   // Load past generations in the background — non-blocking.
@@ -4550,7 +4578,12 @@ async function ideaGenerate() {
   try {
     const r = await fetch("/api/caption/generate", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name, angle}),
+      body: JSON.stringify({
+        source: IDEA_CTX.source,
+        name: IDEA_CTX.name,
+        angle,
+        scout_text: IDEA_CTX._scout_text || "",
+      }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || "generate failed");

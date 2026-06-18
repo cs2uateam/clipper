@@ -18,7 +18,6 @@ import livedl as livedl_mod
 import upload as up_mod
 import insta as ig_mod
 import tiktok as tt_mod
-import idea as idea_mod
 import cutter as cut_mod
 import subs_burn
 
@@ -97,14 +96,6 @@ class TikTokStartReq(_WatermarkOpts):
     subs_color: str = "white"
     subs_bg: str = "none"
     subs_position: str = "bottom"
-
-class IdeaStartReq(BaseModel):
-    source: str   # "youtube" | "upload" | "insta" | "tiktok"
-    name: str
-    api_key: str = ""    # may be empty when a cache hit is expected
-    force: bool = False  # True = bypass cache and call Gemini fresh
-    hint: str = ""       # optional refinement note → forces fresh call
-
 
 class CutSegment(BaseModel):
     start_s: float
@@ -704,6 +695,18 @@ def _resolve_idea_path(source: str, name: str) -> Path:
     except ValueError: raise HTTPException(400, "path escapes root")
     if candidate.exists():
         return candidate
+    # Live-section fallback: files saved by livedl land in `youtube_live/`,
+    # not `youtube/`. The card UI sends source="youtube" for everything
+    # under the YouTube tabs (VOD + Live), so try the sibling folder
+    # before giving up. Live files match `<vid>_live_<start>-<end>.mp4`.
+    if source == "youtube":
+        live_root = livedl_mod.DOWNLOADS_ROOT.resolve()
+        live_candidate = (live_root / name).resolve()
+        try: live_candidate.relative_to(live_root)
+        except ValueError: pass
+        else:
+            if live_candidate.exists():
+                return live_candidate
     # Upload fallback: files live at uploads/<run_id>/<file_name>. If the
     # caller only knew the bare filename (e.g. an external agent without
     # run_id context), search one level deep for a match.
@@ -715,34 +718,8 @@ def _resolve_idea_path(source: str, name: str) -> Path:
                 return hit.resolve()
     raise HTTPException(404, f"file not found: {source}/{name}")
 
-@app.post("/api/idea/start")
-def api_idea_start(req: IdeaStartReq):
-    path = _resolve_idea_path(req.source, req.name)
-    try:
-        job = idea_mod.start_idea(path, req.api_key,
-                                   force=req.force, hint=req.hint)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {"id": job.id, "status": job.status}
-
-@app.get("/api/idea/cached")
-def api_idea_cached(source: str, name: str):
-    """UI calls this before opening the modal to know whether a cache
-    hit is available — lets us hide the API-key prompt on cached files."""
-    path = _resolve_idea_path(source, name)
-    return {"cached": idea_mod.has_cached(path)}
-
-@app.get("/api/idea/status/{job_id}")
-def api_idea_status(job_id: str):
-    job = idea_mod.get_job(job_id)
-    if not job: raise HTTPException(404, "unknown idea job")
-    return job.status_dict()
-
-@app.delete("/api/idea/{job_id}")
-def api_idea_drop(job_id: str):
-    ok = idea_mod.drop_job(job_id)
-    if not ok: raise HTTPException(404, "unknown idea job")
-    return {"dropped": job_id}
+# ---------- Caption (Claude SDK, curator-style 2-phase flow) ----------
+import caption as caption_mod
 
 
 class IdeaPrepareReq(BaseModel):
@@ -753,22 +730,22 @@ class IdeaPrepareReq(BaseModel):
 
 @app.post("/api/idea/prepare")
 def api_idea_prepare(req: IdeaPrepareReq):
-    """Extract frames + transcript for a video without calling Gemini.
-    Used by external agents (curator) that want to write the caption
-    themselves via Claude/whatever. Returns absolute frame paths +
-    transcript text; the caller composes the caption."""
+    """Extract frames + transcript for a video without calling any LLM.
+    Used by external agents (curator) that compose captions themselves.
+    Returns absolute frame paths + transcript text; the caller writes
+    the caption.
+
+    URL kept under /api/idea/* for backward compat with the curator
+    agent (agent.py hits this exact path). Implementation now lives
+    in caption_mod — the legacy idea.py (Gemini) has been retired."""
     path = _resolve_idea_path(req.source, req.name)
-    nf = req.n_frames if req.n_frames > 0 else 0  # 0 → auto in idea_mod
+    nf = req.n_frames if req.n_frames > 0 else 0  # 0 → auto in caption_mod
     if nf > 60: nf = 60                            # hard ceiling regardless
     try:
-        out = idea_mod.prepare_inputs(path, n_frames=nf)
+        out = caption_mod.extract_frames_and_transcript(path, n_frames=nf)
     except Exception as e:
         raise HTTPException(500, f"prepare failed: {type(e).__name__}: {e}")
     return out
-
-
-# ---------- Caption (Claude SDK, curator-style 2-phase flow) ----------
-import caption as caption_mod
 
 
 class CaptionScoutReq(BaseModel):
@@ -780,6 +757,8 @@ class CaptionGenerateReq(BaseModel):
     source: str
     name: str
     angle: str = ""
+    scout_text: str = ""   # cached from prior /api/caption/scout call
+                           # so Lalo sees PART B options the user picked from
 
 
 @app.post("/api/caption/scout")
@@ -801,7 +780,8 @@ async def api_caption_generate(req: CaptionGenerateReq):
     3 platforms). Each generation is appended to per-clip history."""
     path = _resolve_idea_path(req.source, req.name)
     try:
-        out = await caption_mod.generate_captions(path, angle=req.angle)
+        out = await caption_mod.generate_captions(
+            path, angle=req.angle, scout_text=req.scout_text)
     except Exception as e:
         raise HTTPException(500, f"generate failed: {type(e).__name__}: {e}")
     return out

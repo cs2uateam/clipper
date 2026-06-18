@@ -28,3 +28,8 @@ Thumbs.db
 **/.frames/
 **/.thumb*.jpg
 **/.thumb*.png
+
+# Local Claude Agent SDK skills cache — copied here only as an experiment;
+# caption.py disabled skill loading, so don't ship them in git.
+v1/.claude/
+v1/caption-sdk.log
