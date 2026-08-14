@@ -903,7 +903,7 @@ button .material-symbols-outlined { font-size: 18px; }
   color: var(--text); letter-spacing: .02em;
   text-transform: uppercase;
 }
-#dlList, #upList, #igList, #ttList, #allList, #liveDlList {
+#dlList, #upList, #igList, #ttList, #twList, #allList, #liveDlList {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
@@ -1472,6 +1472,136 @@ button .material-symbols-outlined { font-size: 18px; }
   display: block;
 }
 
+/* Split-stack mode: video wrapped so an overlay layer can sit on top
+   of #cutVideo for region drawing. The overlay is pointer-events:auto
+   only when split mode is active. */
+.cut-video-wrap {
+  position: relative; display: block;
+}
+.cut-video-wrap.split-mode .cut-video { cursor: crosshair; }
+.cut-region-overlay {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+/* Hide all split-stack region overlays when not in split mode — the
+   DOM nodes stay so toggling back restores the same rects, but they
+   don't visually clutter the single-crop preview. */
+.cut-video-wrap:not(.split-mode) .cut-region-overlay { display: none; }
+/* Vertical center guide shown while Ctrl-dragging — gives the user a
+   visible target for the snap. Position is computed from the video's
+   content rect (see cutSplitShowCenterGuide). */
+.cut-center-guide {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: linear-gradient(180deg,
+    rgba(122,170,255,0) 0%,
+    rgba(122,170,255,.9) 10%,
+    rgba(122,170,255,.9) 90%,
+    rgba(122,170,255,0) 100%);
+  box-shadow: 0 0 6px rgba(122,170,255,.7);
+  pointer-events: none; display: none;
+}
+.cut-video-wrap.split-mode .cut-region-overlay { pointer-events: auto; }
+.cut-region.selected {
+  border-color: #ffd166;
+  background: rgba(255, 209, 102, 0.12);
+  box-shadow: 0 0 0 1px #ffd166, 0 0 12px rgba(255,209,102,.4);
+}
+.cut-region {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: rgba(120, 170, 255, 0.08);
+  box-sizing: border-box;
+  cursor: move;
+  user-select: none;
+}
+.cut-region.r2 { border-color: var(--accent-2); background: rgba(255, 170, 120, 0.08); }
+.cut-region-label {
+  position: absolute; top: 4px; left: 6px;
+  font-size: 11px; font-weight: 700;
+  color: #fff; text-shadow: 0 1px 2px #000;
+  letter-spacing: .08em;
+  pointer-events: none;
+}
+.cut-region-handle {
+  position: absolute; width: 10px; height: 10px;
+  background: var(--accent); border: 1px solid #fff;
+  box-sizing: border-box;
+}
+.cut-region.r2 .cut-region-handle { background: var(--accent-2); }
+.cut-region-handle.h-nw { left: -5px;  top: -5px;  cursor: nwse-resize; }
+.cut-region-handle.h-n  { left: 50%;   top: -5px;  margin-left:-5px; cursor: ns-resize; }
+.cut-region-handle.h-ne { right: -5px; top: -5px;  cursor: nesw-resize; }
+.cut-region-handle.h-e  { right: -5px; top: 50%;   margin-top:-5px; cursor: ew-resize; }
+.cut-region-handle.h-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.cut-region-handle.h-s  { left: 50%;   bottom: -5px; margin-left:-5px; cursor: ns-resize; }
+.cut-region-handle.h-sw { left: -5px;  bottom: -5px; cursor: nesw-resize; }
+.cut-region-handle.h-w  { left: -5px;  top: 50%;   margin-top:-5px; cursor: ew-resize; }
+
+.cut-mode-row {
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 12px; padding: 8px 12px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.cut-mode-row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.cut-split-controls {
+  display: none;
+  align-items: center; gap: 14px;
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+.cut-video-wrap.split-mode ~ .cut-split-controls { display: flex; }
+.cut-split-controls .cut-split-slider { flex: 1; min-width: 160px; }
+.cut-split-preview {
+  width: 54px; height: 96px;
+  background: #000; border: 1px solid var(--border);
+  border-radius: 4px; display: block;
+}
+.cut-split-menu {
+  position: absolute; top: 100%; right: 0; margin-top: 4px;
+  min-width: 240px; max-width: 320px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+  z-index: 50; font-size: 12.5px;
+}
+.cut-split-menu .layout-group { padding: 4px 0; }
+.cut-split-menu .layout-group + .layout-group {
+  border-top: 1px solid var(--border); margin-top: 4px;
+}
+.cut-split-menu .layout-title {
+  text-transform: uppercase; letter-spacing: .08em;
+  font-size: 10px; color: var(--muted);
+  padding: 4px 8px;
+}
+.cut-split-menu .layout-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border-radius: 4px; cursor: pointer;
+  color: var(--text); user-select: none;
+}
+.cut-split-menu .layout-row:hover { background: var(--bg-2); }
+.cut-split-menu .layout-row .layout-name { flex: 1; min-width: 0; }
+.cut-split-menu .layout-row .layout-meta {
+  color: var(--muted); font-family: var(--font-mono);
+  font-size: 11px;
+}
+.cut-split-menu .layout-row .layout-del {
+  background: transparent; border: none; color: var(--muted);
+  cursor: pointer; padding: 0 4px; opacity: .5;
+}
+.cut-split-menu .layout-row .layout-del:hover { color: var(--err); opacity: 1; }
+.cut-split-menu .layout-empty {
+  padding: 4px 8px; color: var(--muted); font-style: italic;
+}
+.cut-split-hint {
+  font-size: 11px; color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+
 .cut-timeline {
   position: relative; height: 44px;
   margin-top: 16px; padding: 12px 0;
@@ -1938,6 +2068,9 @@ button .material-symbols-outlined { font-size: 18px; }
       </a>
       <a class="nav-item tab" data-tab="tiktok" style="--nav-tint:#25f4ee" onclick="switchTab('tiktok'); ttOnTabOpen()">
         <span class="nav-icon"><span class="material-symbols-outlined">music_note</span></span><span>TikTok</span>
+      </a>
+      <a class="nav-item tab" data-tab="twitch" style="--nav-tint:#9146ff" onclick="switchTab('twitch'); twOnTabOpen()">
+        <span class="nav-icon"><span class="material-symbols-outlined">videocam</span></span><span>Twitch VOD</span>
       </a>
       <a class="nav-item tab" data-tab="upload" style="--nav-tint:var(--accent)" onclick="switchTab('upload'); upOnTabOpen()">
         <span class="nav-icon"><span class="material-symbols-outlined">upload_file</span></span><span>Upload</span>
@@ -2412,6 +2545,77 @@ button .material-symbols-outlined { font-size: 18px; }
       </div>
     </div>
 
+    <!-- ============ TWITCH VOD TAB ============ -->
+    <div id="tab-twitch" class="tab-page" style="display:none">
+      <div class="page-head">
+        <h1 class="page-title">Twitch VOD</h1>
+        <div class="page-sub">Archive URLs (<span class="code">twitch.tv/videos/1234567890</span>). Set start/end (seconds from VOD start) to grab a slice — leave blank for the whole thing.</div>
+      </div>
+
+      <section class="card">
+        <div class="card-eyebrow"><span class="material-symbols-outlined">link</span>Ingest Stream / URL</div>
+        <div class="range-field" style="margin: auto 0">
+          <span class="range-l">URL</span>
+          <input id="twUrl" type="text" placeholder="https://www.twitch.tv/videos/1234567890">
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-eyebrow"><span class="material-symbols-outlined">content_cut</span>Range (optional)</div>
+        <div class="range-row">
+          <div class="range-field">
+            <span class="range-l">From</span>
+            <input id="twStartT" type="text" placeholder="0:00:00" title="empty = from start; HH:MM:SS, MM:SS or seconds — digits auto-format"
+                   onfocus="rangePrefill(this)"
+                   oninput="autoFormatRangeInput(this, event)"
+                   onblur="normalizeRangeInput(this)">
+          </div>
+          <div class="range-field">
+            <span class="range-l">To</span>
+            <input id="twEndT" type="text" placeholder="till end" title="empty = till end; HH:MM:SS, MM:SS or seconds — digits auto-format"
+                   onfocus="rangePrefill(this)"
+                   oninput="autoFormatRangeInput(this, event)"
+                   onblur="normalizeRangeInput(this)">
+          </div>
+        </div>
+      </section>
+
+      <!-- Hidden form state — right pane drives audio/wm exactly like the other tabs. -->
+      <div class="source-hidden-form" aria-hidden="true">
+        <select id="twQuality">
+          <option value="720">720p</option>
+          <option value="1080" selected>1080p</option>
+          <option value="1440">1440p</option>
+          <option value="2160">4K</option>
+          <option value="best">best</option>
+        </select>
+        <input type="checkbox" id="twAudioOnly" onchange="twAudioOnlyChange()">
+        <select id="twAudioFormat" disabled><option value="mp3" selected>mp3</option><option value="m4a">m4a</option></select>
+        <div class="wm-mount" data-prefix="tw"></div>
+      </div>
+
+      <button id="twStartBtn" onclick="twStart()" style="display:none"></button>
+
+      <div class="render-bar" style="--tab-tint:#9146ff; --tab-ink:#1a0d33">
+        <span class="render-bar-hint render-hint-text">Twitch VOD · ready</span>
+        <button class="render-bar-btn" type="button" onclick="runActiveTab()">
+          <span class="material-symbols-outlined">play_arrow</span>
+          <span>Render Now</span>
+        </button>
+      </div>
+
+      <div class="files-section">
+        <div class="files-head">
+          <div class="files-title">Project Clips</div>
+          <div style="display:flex; gap:8px">
+            <button class="ghost tiny" onclick="twRefreshList()">Refresh</button>
+            <button class="danger tiny" onclick="twDeleteAll()">Delete All</button>
+          </div>
+        </div>
+        <div id="twList"></div>
+      </div>
+    </div>
+
     <!-- ============ UPLOAD TAB ============ -->
     <div id="tab-upload" class="tab-page" style="display:none">
       <div class="page-head">
@@ -2495,7 +2699,52 @@ button .material-symbols-outlined { font-size: 18px; }
           <button class="ghost tiny" onclick="cutClearSource()">↺ Switch source</button>
         </div>
 
-        <video id="cutVideo" class="cut-video" preload="metadata" controls></video>
+        <div id="cutVideoWrap" class="cut-video-wrap">
+          <video id="cutVideo" class="cut-video" preload="metadata" controls></video>
+          <div id="cutRegionOverlay" class="cut-region-overlay">
+            <div id="cutCenterGuide" class="cut-center-guide"></div>
+          </div>
+        </div>
+
+        <!-- Cut mode toggle: single-crop (default, original flow) vs.
+             split-stack 9:16 (new). Split mode reveals the rect overlay
+             on top of the video plus the slider/preview row below. -->
+        <div class="cut-mode-row">
+          <label><input type="radio" name="cutMode" value="single" checked onchange="cutSetMode('single')">Single crop</label>
+          <label><input type="radio" name="cutMode" value="split" onchange="cutSetMode('split')">Split-stack 9:16</label>
+          <span class="cut-split-hint" id="cutModeHint">cuts whole frame, multi-segment</span>
+        </div>
+
+        <!-- Split-stack controls: shown only when split mode is active. -->
+        <div id="cutSplitControls" class="cut-split-controls" style="display:none">
+          <label>top share
+            <input type="range" id="cutSplitPct" class="cut-split-slider"
+                   min="20" max="100" value="50" oninput="cutOnSplitPctChange()">
+            <span id="cutSplitPctLabel" class="mono accent">50%</span>
+            <button type="button" id="cutSplitAutoBtn" class="ghost tiny"
+                    onclick="cutSplitAutoPct()"
+                    title="set top share to match the drawn rect aspects perfectly (no padding, no crop)">⚙ авто</button>
+            <button type="button" id="cutSplitAutoCardsBtn" class="ghost tiny"
+                    onclick="cutSplitAutoCards()"
+                    title="generate two rectangles pre-sized to match the slot aspects at the current top share — then drag them onto the content you want">📐 авто карточки</button>
+            <div style="position:relative; display:inline-block">
+              <button type="button" id="cutSplitLayoutsBtn" class="ghost tiny"
+                      onclick="cutSplitLayoutsToggle(event)"
+                      title="ready-made layout presets + save your own">📋 макеты ▾</button>
+              <div id="cutSplitLayoutsMenu" class="cut-split-menu" style="display:none"></div>
+            </div>
+          </label>
+          <svg id="cutSplitPreview" class="cut-split-preview" viewBox="0 0 1080 1920" preserveAspectRatio="none">
+            <rect id="cutSplitPrevTop" x="0" y="0" width="1080" height="960"
+                  fill="rgba(120,170,255,.18)" stroke="#7af" stroke-width="20"/>
+            <rect id="cutSplitPrevBot" x="0" y="960" width="1080" height="960"
+                  fill="rgba(255,170,120,.18)" stroke="#fa7" stroke-width="20"/>
+          </svg>
+          <div style="display:flex; flex-direction:column; gap:2px; min-width:0">
+            <span class="cut-split-hint" id="cutSplitStateHint">draw TOP region (drag on video)</span>
+            <span class="cut-split-hint cut-split-sizes" id="cutSplitSizes"></span>
+          </div>
+        </div>
 
         <!-- Timeline: scrubber + draggable IN/OUT handles. -->
         <div id="cutTimeline" class="cut-timeline" tabindex="0">
@@ -2534,6 +2783,64 @@ button .material-symbols-outlined { font-size: 18px; }
           </label>
         </div>
 
+        <!-- Subs burn-in: full-source Whisper (cached sidecar) → per-segment
+             VTT slice → subtitles filter. Forces re-encode when ON. -->
+        <div class="cut-subs-block" style="margin-top:14px; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm)">
+          <label style="display:flex; align-items:flex-start; gap:8px; font-weight:600; font-size:14px; cursor:pointer">
+            <input type="checkbox" id="cutBurnSubs" checked onchange="cutBurnSubsChange()" style="margin-top:3px">
+            <span>🎬 сабы (whisper) <span class="help" style="font-weight:400">— на 1-2мин видосе прогон ~30-40 сек, кэш ложится рядом с исходником</span></span>
+          </label>
+          <div id="cutSubsStyle" style="margin-top:12px; padding:12px; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-sm)">
+            <div class="grid-2">
+              <div>
+                <label>Язык</label>
+                <select id="cutSubsLang">
+                  <option value="uk" selected>🇺🇦 українська</option>
+                  <option value="en">🇬🇧 english</option>
+                  <option value="ru">🇷🇺 русский</option>
+                </select>
+              </div>
+              <div>
+                <label>Размер</label>
+                <select id="cutSubsSize">
+                  <option value="small">small (2.5%)</option>
+                  <option value="medium" selected>medium (3.5%)</option>
+                  <option value="large">large (4.5%)</option>
+                  <option value="huge">huge (6%)</option>
+                </select>
+              </div>
+              <div>
+                <label>Цвет</label>
+                <select id="cutSubsColor">
+                  <option value="white" selected>⚪ белый</option>
+                  <option value="yellow">🟡 жёлтый</option>
+                  <option value="red">🔴 красный</option>
+                  <option value="green">🟢 зелёный</option>
+                  <option value="cyan">🔵 cyan</option>
+                  <option value="black">⚫ чёрный</option>
+                </select>
+              </div>
+              <div>
+                <label>Фон</label>
+                <select id="cutSubsBg">
+                  <option value="none" selected>нет (обводка)</option>
+                  <option value="shadow">тень</option>
+                  <option value="dark_box">тёмный box</option>
+                  <option value="solid_box">solid чёрный box</option>
+                </select>
+              </div>
+              <div>
+                <label>Позиция</label>
+                <select id="cutSubsPosition">
+                  <option value="bottom" selected>внизу</option>
+                  <option value="top">сверху</option>
+                  <option value="center">по центру</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="cutSegList" class="cut-seg-list"></div>
 
         <!-- Cut watermark mount kept in DOM so cutGo() can read its values,
@@ -2545,6 +2852,13 @@ button .material-symbols-outlined { font-size: 18px; }
 
         <div class="cut-go-row" id="cutGoRow" style="display:none">
           <button id="cutGoBtn" class="big" onclick="cutGo()">▶ Cut <span id="cutGoCount">0</span> segment(s)</button>
+        </div>
+
+        <!-- Split-stack render button: separate row so single-mode flow
+             stays untouched. Shown only in split mode with both rects
+             drawn and IN/OUT producing a non-empty window. -->
+        <div class="cut-go-row" id="cutSplitGoRow" style="display:none">
+          <button id="cutSplitGoBtn" class="big" onclick="cutGoSplitStack()">▶ Render split-stack 9:16</button>
         </div>
 
         <!-- Cut active job indicator moved to right pane. -->
@@ -2658,6 +2972,14 @@ button .material-symbols-outlined { font-size: 18px; }
         </div>
         <div class="bar-track"><div id="ttActiveBar" class="bar-fill"></div></div>
         <div id="ttActiveStats" class="active-stats"></div>
+      </div>
+      <div id="twActiveJob" class="active-job" style="display:none">
+        <div class="active-row">
+          <div class="active-title" id="twActiveTitle"></div>
+          <button class="danger tiny" onclick="twStop()">⏹ Stop</button>
+        </div>
+        <div class="bar-track"><div id="twActiveBar" class="bar-fill"></div></div>
+        <div id="twActiveStats" class="active-stats"></div>
       </div>
       <div id="upActiveJob" class="active-job" style="display:none">
         <div class="active-row">
@@ -3245,6 +3567,11 @@ function renderFileCard(item, source, onDelete) {
          <span class="material-symbols-outlined">lightbulb</span><span class="card-act-l">Idea${item.has_idea ? " ✓" : ""}</span>
        </button>`
     : "";
+  const prokopBtn = ideaName
+    ? `<button class="card-act" title="Prokop-style captions (77prokop77 voice)" onclick='ideaOpen(${JSON.stringify(source)}, ${JSON.stringify(ideaName)}, ${JSON.stringify(item.title || item.file_name)}, "prokop")'>
+         <span class="material-symbols-outlined">videocam</span><span class="card-act-l">Prokop</span>
+       </button>`
+    : "";
   const cutBtn = (ideaName && item.status === "done")
     ? `<button class="card-act" title="Cut segments" onclick='cutOpenFor(${JSON.stringify(source)}, ${JSON.stringify(ideaName)}, ${JSON.stringify(item.file_url)}, ${JSON.stringify(item.title || item.file_name)})'>
          <span class="material-symbols-outlined">content_cut</span><span class="card-act-l">Cut</span>
@@ -3278,6 +3605,7 @@ function renderFileCard(item, source, onDelete) {
       </div>
       <div class="actions">
         ${ideaBtn}
+        ${prokopBtn}
         ${cutBtn}
         ${dlBtn}
         <button class="card-act card-act-del" onclick="(${onDelete})('${esc(item.id)}')" title="Delete">
@@ -4301,6 +4629,149 @@ function ttPickActiveFromList() {
   }).catch(() => {});
 }
 
+// =================== TWITCH VOD TAB ===================
+let TW_TIMER = null;
+let TW_ACTIVE_ID = null;
+
+function twOnTabOpen() { twRefreshList(); twPickActiveFromList(); }
+
+function twAudioOnlyChange() {
+  const ao = $("#twAudioOnly").checked;
+  $("#twAudioFormat").disabled = !ao;
+}
+
+async function twStart() {
+  const url = $("#twUrl").value.trim();
+  if (!url) { toast("URL required", "paste a Twitch VOD link", "err"); return; }
+  const audioOnly = $("#twAudioOnly").checked;
+  // Optional start/end — blank stays null. Backend accepts null for
+  // "full VOD". Sending 0 explicitly is different (forces sectioning).
+  // Inputs accept HH:MM:SS, MM:SS or plain seconds — parseTime handles all.
+  const sVal = $("#twStartT").value.trim();
+  const eVal = $("#twEndT").value.trim();
+  const start_t = sVal === "" ? null : parseTime(sVal);
+  const end_t   = eVal === "" ? null : parseTime(eVal);
+  if (sVal !== "" && start_t == null) { toast("Bad Start", "формат HH:MM:SS / MM:SS / seconds", "err"); return; }
+  if (eVal !== "" && end_t   == null) { toast("Bad End",   "формат HH:MM:SS / MM:SS / seconds", "err"); return; }
+  $("#twStartBtn").disabled = true;
+  $("#twActiveJob").style.display = "block";
+  $("#twActiveTitle").textContent = "Подключаюсь к Twitch…";
+  $("#twActiveStats").textContent = "ждём ответа yt-dlp";
+  $("#twActiveBar").style.background = "var(--accent)";
+  $("#twActiveBar").style.width = "0%";
+  scrollToActive("twActiveJob");
+  try {
+    const r = await fetch("/api/twitch/start", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        url,
+        quality:      $("#twQuality").value,
+        audio_only:   audioOnly,
+        audio_format: $("#twAudioFormat").value,
+        start_t, end_t,
+        ...wmGetCfg("tw"),
+      })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "error");
+    TW_ACTIVE_ID = j.id;
+    twPollStart();
+    toast("Download started", url.slice(0, 60));
+  } catch (e) {
+    toast("Failed", e.message, "err");
+    $("#twActiveJob").style.display = "none";
+  } finally { $("#twStartBtn").disabled = false; }
+}
+
+async function twStop() {
+  if (!TW_ACTIVE_ID) return;
+  try { await fetch(`/api/twitch/stop/${encodeURIComponent(TW_ACTIVE_ID)}`, {method: "POST"}); } catch(e) {}
+  await twTick();
+}
+
+function twPollStart() { if (TW_TIMER) clearInterval(TW_TIMER); TW_TIMER = setInterval(twTick, 1000); twTick(); }
+function twPollStop()  { if (TW_TIMER) { clearInterval(TW_TIMER); TW_TIMER = null; } }
+
+async function twTick() {
+  if (!TW_ACTIVE_ID) { twPollStop(); return; }
+  try {
+    const r = await fetch(`/api/twitch/status/${encodeURIComponent(TW_ACTIVE_ID)}`);
+    if (!r.ok) { twPollStop(); $("#twActiveJob").style.display = "none"; return; }
+    const j = await r.json();
+    twRenderActive(j);
+    if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
+      await twRefreshList();
+      if (j.status === "done") toast("Twitch готов", j.title || "", "good");
+      else if (j.status === "failed") toast("Failed", j.error || "", "err");
+      setTimeout(() => {
+        if (TW_ACTIVE_ID === j.id) { $("#twActiveJob").style.display = "none"; TW_ACTIVE_ID = null; }
+      }, 4000);
+      twPollStop();
+    }
+  } catch (e) { console.warn("twTick failed:", e); }
+}
+
+function twRenderActive(j) {
+  $("#twActiveJob").style.display = "block";
+  $("#twActiveTitle").textContent = j.title || j.file_name || j.vid || "обработка";
+  let stats = "";
+  if (j.status === "downloading") {
+    const pct = j.progress_pct || 0;
+    stats = `↓ ${pct.toFixed(1)}% of ${j.size_total || "?"}` + (j.speed ? ` at ${j.speed}` : "");
+    $("#twActiveBar").style.background = "var(--accent)";
+    $("#twActiveBar").style.width = Math.min(100, pct) + "%";
+  } else if (j.status === "burning") {
+    stats = `🎬 ${j.phase_msg || "watermark"}`;
+    $("#twActiveBar").style.background = "var(--warn)"; $("#twActiveBar").style.width = "100%";
+  } else if (j.status === "done") {
+    stats = `✓ готово · ${fmtBytes(j.file_size_b||0)}`;
+    $("#twActiveBar").style.background = "var(--good)"; $("#twActiveBar").style.width = "100%";
+  } else if (j.status === "failed") {
+    stats = `✗ ${j.error || "unknown"}`; $("#twActiveBar").style.background = "var(--err)";
+  } else if (j.status === "cancelled") {
+    stats = "⏹ отменено"; $("#twActiveBar").style.background = "var(--muted)";
+  } else stats = j.status;
+  $("#twActiveStats").textContent = stats;
+}
+
+async function twRefreshList() {
+  try {
+    const r = await fetch("/api/twitch/list");
+    const j = await r.json();
+    const root = $("#twList");
+    if (!j.jobs.length) { root.innerHTML = emptyState("no Twitch VODs yet"); return; }
+    root.innerHTML = j.jobs.map(it => renderFileCard(it, "twitch", "twDelete")).join("");
+  } catch (e) { console.warn("twRefreshList:", e); }
+}
+
+async function twDelete(jobId) {
+  if (!await confirmModal("Delete Twitch VOD from disk?")) return;
+  try {
+    await fetch(`/api/twitch/${encodeURIComponent(jobId)}`, {method: "DELETE"});
+    await twRefreshList();
+  } catch(e) {}
+}
+
+async function twDeleteAll() {
+  const r = await fetch("/api/twitch/list").catch(() => null);
+  if (!r) return;
+  const j = await r.json();
+  if (!j.jobs || !j.jobs.length) return;
+  if (!await confirmModal(`Delete ALL ${j.jobs.length} Twitch VODs from disk?`)) return;
+  for (const it of j.jobs) {
+    try { await fetch(`/api/twitch/${encodeURIComponent(it.id)}`, {method: "DELETE"}); } catch(e) {}
+  }
+  await twRefreshList();
+}
+
+function twPickActiveFromList() {
+  fetch("/api/twitch/list").then(r => r.json()).then(j => {
+    const active = (j.jobs || []).find(x =>
+      ["downloading","burning","queued"].includes(x.status));
+    if (active && !TW_ACTIVE_ID) { TW_ACTIVE_ID = active.id; twPollStart(); }
+  }).catch(() => {});
+}
+
 // =================== ALL TAB (aggregated feed) ===================
 // Read-only вкладка: единый хронологический список из всех 4 источников.
 // Карточки рендерятся через renderFileCard (как в остальных вкладках),
@@ -4312,6 +4783,7 @@ const SOURCE_META = {
   youtube: { icon: "▶️", label: "YouTube",   api: "download" },
   insta:   { icon: "📸", label: "Instagram", api: "insta"    },
   tiktok:  { icon: "🎵", label: "TikTok",    api: "tiktok"   },
+  twitch:  { icon: "🟣", label: "Twitch",    api: "twitch"   },
   upload:  { icon: "📤", label: "Загружено", api: "upload"   },
 };
 let ALL_LAST_LIST = [];
@@ -4408,9 +4880,23 @@ function _ideaShowError(msg) {
   if (err) { err.textContent = "✗ " + msg; err.style.display = "block"; }
 }
 
-async function ideaOpen(source, name, title) {
-  IDEA_CTX = {source, name, title};
-  $("#ideaForFile").textContent = title || name;
+async function ideaOpen(source, name, title, persona = "default") {
+  persona = (persona === "prokop") ? "prokop" : "default";
+  IDEA_CTX = {source, name, title, persona};
+  // Modal header reflects which persona will generate. Prokop keeps the
+  // same modal so scout re-uses.
+  const label = (persona === "prokop") ? "PROKOP" : "IDEA";
+  const forFileEl = $("#ideaForFile");
+  forFileEl.textContent = title || name;
+  // Update the modal's persona-badge in the h2 (before the "— filename").
+  // h2 shape: "Idea — <span id="ideaForFile">…</span>" — swap the text node.
+  const header = document.querySelector("#ideaModal .modal-title");
+  if (header && header.firstChild) header.firstChild.textContent = label + " — ";
+  // Rename the primary Generate button so user sees which persona fires.
+  const genBtn = document.getElementById("ideaGenBtn");
+  if (genBtn) genBtn.textContent = (persona === "prokop")
+    ? "▶ Generate (Prokop)"
+    : "▶ Generate captions";
   $("#ideaModal").classList.add("open");
   // If we already have history for this clip — show it instead of
   // immediately re-running scout (paid Claude call). User picks a past
@@ -4449,7 +4935,7 @@ async function _ideaRunScout() {
   try {
     const r = await fetch("/api/caption/scout", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name}),
+      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name, persona: IDEA_CTX.persona || "default"}),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || "scout failed");
@@ -4558,7 +5044,7 @@ async function ideaScoutAgain() {
   try {
     const r = await fetch("/api/caption/scout", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name}),
+      body: JSON.stringify({source: IDEA_CTX.source, name: IDEA_CTX.name, persona: IDEA_CTX.persona || "default"}),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || "scout failed");
@@ -4583,6 +5069,7 @@ async function ideaGenerate() {
         name: IDEA_CTX.name,
         angle,
         scout_text: IDEA_CTX._scout_text || "",
+        persona: IDEA_CTX.persona || "default",
       }),
     });
     const j = await r.json();
@@ -4627,6 +5114,24 @@ function _ideaSplitCaptions(text) {
     if (tIdx >= 0) {
       sections[lastKey] = body.slice(0, tIdx).trim();
       trailer = body.slice(tIdx).trim();
+    }
+  }
+  // Strip persona signoffs / extra commentary that lands AFTER the
+  // hashtag line of each platform with hashtags. The model
+  // (Lalo) sometimes appends sayings like «Сделано красиво.» / «Готово.»
+  // from his persona — they're not part of the post. Heuristic: for
+  // Instagram / TikTok / YouTube Shorts, find the LAST line containing
+  // a `#`, keep everything up to and including it, drop the rest.
+  for (const k of ["Instagram","TikTok","YouTube Shorts"]) {
+    const body = sections[k];
+    if (!body) continue;
+    const lines = body.split("\n");
+    let lastHash = -1;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].indexOf("#") >= 0) { lastHash = i; break; }
+    }
+    if (lastHash >= 0 && lastHash < lines.length - 1) {
+      sections[k] = lines.slice(0, lastHash + 1).join("\n").trim();
     }
   }
   return {preamble, sections, trailer};
@@ -4777,6 +5282,7 @@ let CUT_JOB_TIMER = null;
 function cutOnTabOpen() {
   cutRefreshList();
   cutBindTimelineHandlers();
+  cutSplitBindOverlay();
   if (CUT_LIST_TIMER) clearInterval(CUT_LIST_TIMER);
   CUT_LIST_TIMER = setInterval(cutRefreshList, 5000);
 }
@@ -4821,6 +5327,12 @@ function cutLoadSource(source, name, fileUrl, title) {
   cutRenderSegList();
   $("#cutGoRow").style.display = "none";
   $("#cutActiveJob").style.display = "none";
+  // Reset split-stack regions whenever a new source is loaded so stale
+  // rects from the previous video don't leak into the new geometry.
+  if (typeof CUT_SPLIT !== "undefined") {
+    cutSplitResetDraw();
+    cutSplitUpdatePreview();
+  }
 }
 
 function cutClearSource() {
@@ -4855,6 +5367,7 @@ function cutUpdateTimes() {
   $("#cutOutTime").textContent = cutFmtTime(CUT.outS);
   $("#cutNowTime").textContent = cutFmtTime(CUT.videoEl ? CUT.videoEl.currentTime : 0);
   $("#cutLenTime").textContent = cutFmtTime(Math.max(0, CUT.outS - CUT.inS));
+  if (typeof cutSplitUpdateGoVisibility === "function") cutSplitUpdateGoVisibility();
 }
 
 function cutFmtTime(s) {
@@ -4987,6 +5500,27 @@ async function cutUploadLocalFile(file) {
   }
 }
 
+// ----- Subs config (Cut editor only) -----
+// Reads the "🎬 сабы" checkbox + style dropdowns and returns the fields
+// the backend Pydantic CutStartReq/CutSplitStackReq expect. Style values
+// go through to ffmpeg even when the checkbox is off (harmless when
+// subs_enabled=false) — keeps the shape predictable.
+function cutSubsGetCfg() {
+  return {
+    subs_enabled:  $("#cutBurnSubs").checked,
+    subs_lang:     $("#cutSubsLang").value,
+    subs_size:     $("#cutSubsSize").value,
+    subs_color:    $("#cutSubsColor").value,
+    subs_bg:       $("#cutSubsBg").value,
+    subs_position: $("#cutSubsPosition").value,
+  };
+}
+function cutBurnSubsChange() {
+  const on = $("#cutBurnSubs").checked;
+  const style = document.getElementById("cutSubsStyle");
+  if (style) style.style.display = on ? "" : "none";
+}
+
 // ----- Segment list -----
 function cutAddSegment() {
   if (!CUT.durationS) return;
@@ -5036,6 +5570,731 @@ function cutSeekTo(t) {
   if (CUT.videoEl) { CUT.videoEl.currentTime = t; cutUpdateTimes(); cutRedrawTimeline(); }
 }
 
+// ===== Split-stack 9:16 mode =====
+// State machine: drawState ∈ {"r1","r1_done","r2","r2_done"}.
+// While "r1": user must click-drag inside the video to create region 1.
+// Once r1 exists ("r1_done"), draw-state advances to "r2" so the next
+// drag creates region 2. After both exist, the regions are draggable
+// (move) and resizable (8 handles). Slider drives split_pct live.
+const CUT_SPLIT = {
+  mode: "single",          // "single" | "split"
+  drawState: "r1",         // "r1" | "r1_done" | "r2" | "r2_done"
+  r1: null,                // {x,y,w,h} in DISPLAY (overlay) px
+  r2: null,
+  splitPct: 50,
+  selected: null,          // "r1" | "r2" | null — set by mousedown,
+                           // moved by arrow keys
+};
+
+function cutSetMode(mode) {
+  CUT_SPLIT.mode = (mode === "split") ? "split" : "single";
+  const wrap = document.getElementById("cutVideoWrap");
+  const split = document.getElementById("cutSplitControls");
+  const goRowSingle = document.getElementById("cutGoRow");
+  const goRowSplit = document.getElementById("cutSplitGoRow");
+  const hint = document.getElementById("cutModeHint");
+  if (CUT_SPLIT.mode === "split") {
+    wrap.classList.add("split-mode");
+    split.style.display = "flex";
+    goRowSingle.style.display = "none";
+    if (hint) hint.textContent = "two regions → 1080x1920 stacked output";
+    cutSplitResetDraw();
+    cutSplitUpdateGoVisibility();
+    cutSplitRenderRects();
+    cutSplitUpdatePreview();
+  } else {
+    wrap.classList.remove("split-mode");
+    split.style.display = "none";
+    goRowSplit.style.display = "none";
+    if (hint) hint.textContent = "cuts whole frame, multi-segment";
+    // Restore single-mode go row visibility based on existing segments.
+    cutRenderSegList();
+  }
+}
+
+function cutSplitResetDraw() {
+  CUT_SPLIT.drawState = "r1";
+  CUT_SPLIT.r1 = null;
+  CUT_SPLIT.r2 = null;
+  cutSplitRenderRects();
+  cutSplitUpdateGoVisibility();
+  const h = document.getElementById("cutSplitStateHint");
+  if (h) h.textContent = "draw TOP region (drag on video)";
+}
+
+function cutSplitUpdateGoVisibility() {
+  // At 100% top-share the bottom slot vanishes → only r1 required.
+  const needBoth = CUT_SPLIT.splitPct < 100;
+  const ready = (CUT_SPLIT.mode === "split"
+                 && CUT_SPLIT.r1
+                 && (!needBoth || CUT_SPLIT.r2)
+                 && CUT.durationS
+                 && CUT.outS > CUT.inS);
+  document.getElementById("cutSplitGoRow").style.display = ready ? "flex" : "none";
+}
+
+function cutOnSplitPctChange() {
+  const el = document.getElementById("cutSplitPct");
+  CUT_SPLIT.splitPct = parseInt(el.value, 10) || 50;
+  document.getElementById("cutSplitPctLabel").textContent = CUT_SPLIT.splitPct + "%";
+  cutSplitUpdatePreview();
+  cutSplitRenderRects();
+  cutSplitUpdateGoVisibility();
+  // Refresh hint: at 100% the bottom rect isn't required.
+  const h = document.getElementById("cutSplitStateHint");
+  if (h) {
+    if (CUT_SPLIT.splitPct >= 100) {
+      h.textContent = CUT_SPLIT.r1 ? "drag to move / handles to resize"
+                                   : "draw region (drag on video) — one rect only at 100%";
+    } else {
+      h.textContent = !CUT_SPLIT.r1 ? "draw TOP region (drag on video)"
+                   :  !CUT_SPLIT.r2 ? "draw BOTTOM region (drag on video)"
+                   :                  "drag to move / handles to resize";
+    }
+  }
+}
+
+function cutSplitShowCenterGuide(x) {
+  const g = document.getElementById("cutCenterGuide");
+  if (!g) return;
+  g.style.left = (x - 0.5) + "px";
+  g.style.display = "block";
+}
+function cutSplitHideCenterGuide() {
+  const g = document.getElementById("cutCenterGuide");
+  if (g) g.style.display = "none";
+}
+
+// ───────── Split-stack layout presets ─────────
+// Built-in layouts: each just sets split %, then auto-generates pre-
+// sized rectangles via cutSplitAutoCards(). User can then drag to
+// position. No region coords stored — works on ANY video preview size.
+const CUT_SPLIT_BUILTIN_LAYOUTS = [
+  { id: "reaction_30_70", name: "🎭 Реакция 30/70", split: 30 },
+  { id: "equal_50_50",    name: "⚖ Равное 50/50",  split: 50 },
+  { id: "pov_top_60_40",  name: "🎮 POV сверху 60/40", split: 60 },
+  { id: "pov_big_70_30",  name: "🎯 Крупный POV 70/30", split: 70 },
+  { id: "face_big_40_60", name: "💬 Большое лицо 40/60", split: 40 },
+];
+const _CUT_LAYOUTS_KEY = "clipper_split_layouts_v1";
+
+function cutSplitLoadCustomLayouts() {
+  try { return JSON.parse(localStorage.getItem(_CUT_LAYOUTS_KEY) || "[]"); }
+  catch (e) { return []; }
+}
+function cutSplitSaveCustomLayouts(arr) {
+  try { localStorage.setItem(_CUT_LAYOUTS_KEY, JSON.stringify(arr)); }
+  catch (e) {}
+}
+
+function cutSplitLayoutsToggle(ev) {
+  if (ev) ev.stopPropagation();
+  const m = document.getElementById("cutSplitLayoutsMenu");
+  if (!m) return;
+  if (m.style.display === "block") { m.style.display = "none"; return; }
+  cutSplitLayoutsRender();
+  m.style.display = "block";
+  // Close on outside click (one-shot listener).
+  setTimeout(() => {
+    document.addEventListener("click", function close(e) {
+      if (!m.contains(e.target) && e.target.id !== "cutSplitLayoutsBtn") {
+        m.style.display = "none";
+        document.removeEventListener("click", close);
+      }
+    });
+  }, 0);
+}
+
+function cutSplitLayoutsRender() {
+  const m = document.getElementById("cutSplitLayoutsMenu");
+  if (!m) return;
+  const custom = cutSplitLoadCustomLayouts();
+  const parts = [];
+  parts.push('<div class="layout-group"><div class="layout-title">Готовые</div>');
+  for (const p of CUT_SPLIT_BUILTIN_LAYOUTS) {
+    parts.push(
+      `<div class="layout-row" onclick="cutSplitApplyBuiltin('${p.id}')">
+        <span class="layout-name">${p.name}</span>
+        <span class="layout-meta">${p.split}/${100-p.split}</span>
+      </div>`);
+  }
+  parts.push('</div>');
+  parts.push('<div class="layout-group"><div class="layout-title">Сохранённые</div>');
+  if (!custom.length) {
+    parts.push('<div class="layout-empty">— пусто —</div>');
+  } else {
+    custom.forEach((p, idx) => {
+      const nameEsc = (p.name || "—").replace(/[<>&]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+      parts.push(
+        `<div class="layout-row" onclick="cutSplitApplyCustom(${idx})">
+          <span class="layout-name">${nameEsc}</span>
+          <span class="layout-meta">${p.split||50}/${100-(p.split||50)}</span>
+          <button class="layout-del" onclick="event.stopPropagation(); cutSplitDeleteCustom(${idx})" title="удалить">✕</button>
+        </div>`);
+    });
+  }
+  parts.push('</div>');
+  parts.push('<div class="layout-group">');
+  parts.push(`<div class="layout-row" onclick="cutSplitSaveCurrent()"><span class="layout-name">💾 Сохранить текущий…</span></div>`);
+  parts.push('</div>');
+  m.innerHTML = parts.join("");
+}
+
+function cutSplitApplyBuiltin(presetId) {
+  const p = CUT_SPLIT_BUILTIN_LAYOUTS.find(x => x.id === presetId);
+  if (!p) return;
+  const el = document.getElementById("cutSplitPct");
+  if (el) {
+    el.value = String(p.split);
+    CUT_SPLIT.splitPct = p.split;
+    document.getElementById("cutSplitPctLabel").textContent = p.split + "%";
+  }
+  cutSplitUpdatePreview();
+  // Generate matching rectangles in the overlay so user can drag them.
+  cutSplitAutoCards();
+  document.getElementById("cutSplitLayoutsMenu").style.display = "none";
+}
+
+function cutSplitApplyCustom(idx) {
+  const arr = cutSplitLoadCustomLayouts();
+  const p = arr[idx];
+  if (!p) return;
+  const el = document.getElementById("cutSplitPct");
+  if (el) {
+    el.value = String(p.split || 50);
+    CUT_SPLIT.splitPct = p.split || 50;
+    document.getElementById("cutSplitPctLabel").textContent = CUT_SPLIT.splitPct + "%";
+  }
+  // Source-pixel coords saved → convert to current display.
+  const r1d = p.r1_src ? cutSplitRectFromSource(p.r1_src) : null;
+  const r2d = p.r2_src ? cutSplitRectFromSource(p.r2_src) : null;
+  if (r1d && r2d) {
+    CUT_SPLIT.r1 = r1d;
+    CUT_SPLIT.r2 = r2d;
+    CUT_SPLIT.drawState = "r2_done";
+    cutSplitRenderRects();
+    cutSplitUpdateGoVisibility();
+  } else {
+    // Fallback: just trigger auto-cards if conversion failed (e.g.
+    // video not yet ready).
+    cutSplitAutoCards();
+  }
+  cutSplitUpdatePreview();
+  document.getElementById("cutSplitLayoutsMenu").style.display = "none";
+}
+
+function cutSplitSaveCurrent() {
+  if (!CUT_SPLIT.r1 || !CUT_SPLIT.r2) {
+    toast("Нечего сохранять", "сначала размести два прямоугольника", "warn");
+    return;
+  }
+  const r1_src = cutSplitRectToSource(CUT_SPLIT.r1);
+  const r2_src = cutSplitRectToSource(CUT_SPLIT.r2);
+  if (!r1_src || !r2_src) {
+    toast("Видео не готово", "metadata ещё грузится", "warn");
+    return;
+  }
+  const name = prompt("Имя макета:", `мой ${CUT_SPLIT.splitPct}/${100-CUT_SPLIT.splitPct}`);
+  if (!name || !name.trim()) return;
+  const arr = cutSplitLoadCustomLayouts();
+  arr.push({
+    name: name.trim(),
+    split: CUT_SPLIT.splitPct,
+    r1_src, r2_src,
+  });
+  cutSplitSaveCustomLayouts(arr);
+  cutSplitLayoutsRender();
+  toast("Сохранён", `«${name.trim()}» добавлен в макеты`, "good");
+}
+
+function cutSplitDeleteCustom(idx) {
+  const arr = cutSplitLoadCustomLayouts();
+  if (idx < 0 || idx >= arr.length) return;
+  const removed = arr.splice(idx, 1)[0];
+  cutSplitSaveCustomLayouts(arr);
+  cutSplitLayoutsRender();
+  if (removed) toast("Удалён", `«${removed.name||"—"}» убран`, "good");
+}
+
+// REVERSE of cutSplitAutoPct: user picks the top share first (e.g. 30%),
+// then this generates TWO ready-made rectangles in the overlay sized
+// to perfectly match each slot's aspect ratio. User can drag them onto
+// the content they want — the size already matches the slot, so when
+// rendered there will be zero black padding and zero center-crop.
+//
+// Math: top slot is 1080 × H1 (H1 = 1920 × pct/100), bottom is 1080 × H2.
+// Each rect's aspect (w/h) = slot_w/slot_h. We pick initial sizes that
+// fit nicely within the visible content area, stacked vertically.
+function cutSplitAutoCards() {
+  const v = CUT.videoEl;
+  if (!v || !v.videoWidth || !v.videoHeight) {
+    toast("Load a video first", "no source loaded yet", "warn");
+    return;
+  }
+  const { ox, oy, cw, ch } = cutSplitContentRect(v);
+  if (cw < 20 || ch < 20) {
+    toast("Preview too small", "make the video preview taller", "warn");
+    return;
+  }
+  const pct = CUT_SPLIT.splitPct;
+  const H1 = 1920 * pct / 100;
+  const H2 = 1920 - H1;
+  const asp1 = 1080 / H1;   // width/height target for region 1
+  const asp2 = 1080 / H2;   // width/height target for region 2
+  // Initial widths: each rect starts at 70% of the visible content width.
+  let w1 = cw * 0.7, h1 = w1 / asp1;
+  let w2 = cw * 0.7, h2 = w2 / asp2;
+  // Shrink proportionally if the stacked pair would overflow vertically
+  // (need a small gap between them so handles don't overlap).
+  const gap = 20;
+  if (h1 + h2 + gap > ch) {
+    const scale = (ch - gap) / (h1 + h2);
+    w1 *= scale; h1 *= scale;
+    w2 *= scale; h2 *= scale;
+  }
+  // Center-stack vertically within the content area.
+  const stackH = h1 + h2 + gap;
+  const startY = oy + (ch - stackH) / 2;
+  CUT_SPLIT.r1 = {
+    x: ox + (cw - w1) / 2,
+    y: startY,
+    w: w1, h: h1,
+  };
+  CUT_SPLIT.r2 = {
+    x: ox + (cw - w2) / 2,
+    y: startY + h1 + gap,
+    w: w2, h: h2,
+  };
+  CUT_SPLIT.drawState = "r2_done";
+  cutSplitRenderRects();
+  cutSplitUpdateGoVisibility();
+  cutSplitUpdatePreview();
+  toast("Cards generated",
+        `top ${pct}% → 1080×${Math.round(H1)}, bottom → 1080×${Math.round(H2)} — drag onto content`,
+        "good");
+}
+
+// Auto-pick the top share so each region — once scaled to 1080 wide —
+// naturally fills its allotted slot height, with no black padding and
+// no center-crop. Math: per-region scaled height per unit width =
+// rect.h / rect.w (aspect ratio). The fair share each region takes of
+// the total 1920px output is its aspect ratio divided by the sum.
+// Clamped to the slider's 20-80 range so neither slot collapses to
+// nothing.
+function cutSplitAutoPct() {
+  const r1 = CUT_SPLIT.r1, r2 = CUT_SPLIT.r2;
+  if (!r1 || !r2 || r1.w <= 0 || r2.w <= 0) {
+    toast("Draw both regions first", "TOP + BOTTOM rectangles needed", "warn");
+    return;
+  }
+  const ar1 = r1.h / r1.w;
+  const ar2 = r2.h / r2.w;
+  if (ar1 + ar2 <= 0) return;
+  let pct = Math.round(100 * ar1 / (ar1 + ar2));
+  pct = Math.max(20, Math.min(80, pct));
+  const el = document.getElementById("cutSplitPct");
+  el.value = String(pct);
+  CUT_SPLIT.splitPct = pct;
+  document.getElementById("cutSplitPctLabel").textContent = pct + "%";
+  cutSplitUpdatePreview();
+  toast("Auto split", `top ${pct}% — regions fit exactly`, "good");
+}
+
+function cutSplitUpdatePreview() {
+  const pct = CUT_SPLIT.splitPct;
+  const single = pct >= 100;
+  const topH = single ? 1920 : Math.round(1920 * pct / 100);
+  const botH = 1920 - topH;
+  const top = document.getElementById("cutSplitPrevTop");
+  const bot = document.getElementById("cutSplitPrevBot");
+  if (top) top.setAttribute("height", topH);
+  if (bot) {
+    bot.setAttribute("y", topH);
+    bot.setAttribute("height", botH);
+    bot.style.display = single ? "none" : "";
+  }
+  // Size readout: output slot dims (fixed 9:16 canvas), plus source-crop
+  // dims for each drawn region when available. Two lines to keep it tight.
+  const el = document.getElementById("cutSplitSizes");
+  if (el) {
+    const lines = single
+      ? [`slot: 1080×1920`]
+      : [`slot: TOP 1080×${topH} · BOT 1080×${botH}`];
+    const r1s = CUT_SPLIT.r1 ? cutSplitRectToSource(CUT_SPLIT.r1) : null;
+    const r2s = (!single && CUT_SPLIT.r2) ? cutSplitRectToSource(CUT_SPLIT.r2) : null;
+    if (r1s || r2s) {
+      if (single) {
+        lines.push(`crop: ${r1s.w}×${r1s.h}`);
+      } else {
+        const t = r1s ? `${r1s.w}×${r1s.h}` : "—";
+        const b = r2s ? `${r2s.w}×${r2s.h}` : "—";
+        lines.push(`crop: TOP ${t} · BOT ${b}`);
+      }
+    }
+    el.textContent = lines.join("  ·  ");
+  }
+}
+
+// Render current r1/r2 as absolute-positioned DIVs inside the overlay.
+function cutSplitRenderRects() {
+  const ov = document.getElementById("cutRegionOverlay");
+  if (!ov) return;
+  ov.innerHTML = "";
+  const mk = (r, key, label) => {
+    if (!r) return;
+    const d = document.createElement("div");
+    d.className = "cut-region " + key + (CUT_SPLIT.selected === key ? " selected" : "");
+    d.dataset.key = key;
+    d.style.left = r.x + "px";
+    d.style.top  = r.y + "px";
+    d.style.width  = r.w + "px";
+    d.style.height = r.h + "px";
+    const lbl = document.createElement("div");
+    lbl.className = "cut-region-label";
+    lbl.textContent = label;
+    d.appendChild(lbl);
+    for (const h of ["nw","n","ne","e","se","s","sw","w"]) {
+      const k = document.createElement("div");
+      k.className = "cut-region-handle h-" + h;
+      k.dataset.handle = h;
+      d.appendChild(k);
+    }
+    ov.appendChild(d);
+  };
+  const single = CUT_SPLIT.splitPct >= 100;
+  mk(CUT_SPLIT.r1, "r1", single ? "REGION" : "TOP");
+  if (!single) mk(CUT_SPLIT.r2, "r2", "BOTTOM");
+  cutSplitUpdatePreview();
+}
+
+// Convert overlay (display) px → source-pixel coords using the video's
+// intrinsic dimensions. The overlay covers the rendered video area
+// exactly (position:absolute inset:0 on a wrapper sized by the video),
+// so display rect = video rect.
+// Compute the actual area inside the <video> element where pixels are
+// painted, accounting for object-fit:contain letterbox/pillarbox. The
+// overlay sits inset:0 on the element, so a rect drawn at display-px
+// (0,0) might be over a black bar — we need to subtract the bar offset
+// AND use the inner content size as the ratio basis, not the element
+// bounding box.
+function cutSplitContentRect(v) {
+  const box = v.getBoundingClientRect();
+  if (!v.videoWidth || !v.videoHeight || box.width < 1 || box.height < 1) {
+    return { ox: 0, oy: 0, cw: box.width, ch: box.height };
+  }
+  const elAR  = box.width  / box.height;
+  const vidAR = v.videoWidth / v.videoHeight;
+  let cw, ch, ox, oy;
+  if (elAR > vidAR) {
+    // Element wider than video → pillarbox (bars on sides).
+    ch = box.height; cw = ch * vidAR;
+    ox = (box.width - cw) / 2; oy = 0;
+  } else {
+    // Element taller than video → letterbox (bars on top/bottom).
+    cw = box.width; ch = cw / vidAR;
+    ox = 0; oy = (box.height - ch) / 2;
+  }
+  return { ox, oy, cw, ch };
+}
+
+// Reverse of cutSplitRectToSource: takes source-pixel coords and
+// returns overlay (display) coords. Used when applying a saved layout
+// — presets are stored in source coords so they survive different
+// video resolutions / preview sizes.
+function cutSplitRectFromSource(srcR) {
+  const v = CUT.videoEl;
+  if (!v || !v.videoWidth || !v.videoHeight) return null;
+  const { ox, oy, cw, ch } = cutSplitContentRect(v);
+  if (cw < 1 || ch < 1) return null;
+  const sx = cw / v.videoWidth;
+  const sy = ch / v.videoHeight;
+  return {
+    x: ox + srcR.x * sx,
+    y: oy + srcR.y * sy,
+    w: srcR.w * sx,
+    h: srcR.h * sy,
+  };
+}
+
+function cutSplitRectToSource(r) {
+  const v = CUT.videoEl;
+  if (!v || !v.videoWidth || !v.videoHeight) return null;
+  const { ox, oy, cw, ch } = cutSplitContentRect(v);
+  if (cw < 1 || ch < 1) return null;
+  // Translate overlay-px (which use the element box) into content-px
+  // (the actual video display area), then scale to source-px.
+  const sx = v.videoWidth  / cw;
+  const sy = v.videoHeight / ch;
+  let x = Math.round((r.x - ox) * sx);
+  let y = Math.round((r.y - oy) * sy);
+  let w = Math.round(r.w * sx);
+  let h = Math.round(r.h * sy);
+  // libx264 yuv420p needs even dimensions.
+  if (w % 2) w--;
+  if (h % 2) h--;
+  if (x % 2) x++;
+  if (y % 2) y++;
+  // Clamp to source bounds.
+  x = Math.max(0, Math.min(v.videoWidth - 2, x));
+  y = Math.max(0, Math.min(v.videoHeight - 2, y));
+  w = Math.max(2, Math.min(v.videoWidth - x, w));
+  h = Math.max(2, Math.min(v.videoHeight - y, h));
+  return {x, y, w, h};
+}
+
+// ----- Mouse interaction on the overlay: create / move / resize rects -----
+let _cutSplitBound = false;
+function cutSplitBindOverlay() {
+  if (_cutSplitBound) return;
+  _cutSplitBound = true;
+  const ov = document.getElementById("cutRegionOverlay");
+  if (!ov) return;
+  let action = null;  // {type:"create"|"move"|"resize", key, handle?, startX, startY, orig:{x,y,w,h}}
+
+  const overlayXY = (e) => {
+    const rect = ov.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top,
+             W: rect.width, H: rect.height };
+  };
+
+  ov.addEventListener("mousedown", (e) => {
+    if (CUT_SPLIT.mode !== "split") return;
+    const handle = e.target.closest && e.target.closest(".cut-region-handle");
+    const region = e.target.closest && e.target.closest(".cut-region");
+    const p = overlayXY(e);
+    if (handle && region) {
+      // Resize existing region.
+      const key = region.dataset.key;
+      CUT_SPLIT.selected = key;
+      action = { type: "resize", key, handle: handle.dataset.handle,
+                 startX: p.x, startY: p.y,
+                 orig: Object.assign({}, CUT_SPLIT[key]) };
+      cutSplitRenderRects();
+    } else if (region) {
+      // Move existing region.
+      const key = region.dataset.key;
+      CUT_SPLIT.selected = key;
+      action = { type: "move", key,
+                 startX: p.x, startY: p.y,
+                 orig: Object.assign({}, CUT_SPLIT[key]) };
+      cutSplitRenderRects();
+    } else {
+      // Create new region — depends on drawState.
+      let key = null;
+      if (CUT_SPLIT.drawState === "r1" || (!CUT_SPLIT.r1)) key = "r1";
+      else if (CUT_SPLIT.drawState === "r2" || (!CUT_SPLIT.r2)) key = "r2";
+      else return;
+      action = { type: "create", key,
+                 startX: p.x, startY: p.y,
+                 orig: { x: p.x, y: p.y, w: 0, h: 0 } };
+      CUT_SPLIT[key] = { x: p.x, y: p.y, w: 1, h: 1 };
+      CUT_SPLIT.selected = key;
+      cutSplitRenderRects();
+    }
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!action) return;
+    const ov2 = document.getElementById("cutRegionOverlay");
+    if (!ov2) return;
+    const rect = ov2.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const dx = px - action.startX;
+    const dy = py - action.startY;
+    const W = rect.width, H = rect.height;
+    const o = action.orig;
+    let r = Object.assign({}, CUT_SPLIT[action.key] || o);
+    if (action.type === "create") {
+      const x = Math.min(action.startX, px);
+      const y = Math.min(action.startY, py);
+      r = { x, y, w: Math.max(2, Math.abs(dx)), h: Math.max(2, Math.abs(dy)) };
+    } else if (action.type === "move") {
+      r = { x: o.x + dx, y: o.y + dy, w: o.w, h: o.h };
+      // Ctrl = snap rect's horizontal center to the video's vertical
+      // centerline so it aligns perfectly with the source center axis.
+      // Useful for centering a face/scoreboard on the 9:16 output.
+      if (e.ctrlKey && CUT.videoEl) {
+        const cr = cutSplitContentRect(CUT.videoEl);
+        if (cr.cw > 0) {
+          const centerX = cr.ox + cr.cw / 2;
+          r.x = centerX - r.w / 2;
+          cutSplitShowCenterGuide(centerX);
+        }
+      } else {
+        cutSplitHideCenterGuide();
+      }
+    } else if (action.type === "resize") {
+      let nx = o.x, ny = o.y, nw = o.w, nh = o.h;
+      const h = action.handle;
+      if (h.includes("e")) nw = Math.max(8, o.w + dx);
+      if (h.includes("s")) nh = Math.max(8, o.h + dy);
+      if (h.includes("w")) { nx = o.x + dx; nw = Math.max(8, o.w - dx); }
+      if (h.includes("n")) { ny = o.y + dy; nh = Math.max(8, o.h - dy); }
+      // Shift = lock aspect ratio while resizing. Drive the larger axis
+      // and recompute the smaller one so o.w/o.h stays constant. Anchors
+      // depend on which handle was grabbed:
+      //   • corners (nw/ne/se/sw): opposite corner stays fixed
+      //   • edges N/S: bottom/top edge stays fixed, width changes around
+      //     the horizontal center
+      //   • edges E/W: opposite vertical edge stays fixed, height changes
+      //     around the vertical center
+      if (e.shiftKey && o.w > 0 && o.h > 0) {
+        const ar = o.w / o.h;            // original width/height
+        const isCorner = (h === "nw" || h === "ne" || h === "se" || h === "sw");
+        const isHoriz  = (h === "e"  || h === "w");
+        const isVert   = (h === "n"  || h === "s");
+        let s;
+        if (isCorner) {
+          // Scale factor: whichever axis the user moved further (relative
+          // to original size) wins. Lets the corner "lead" the resize.
+          s = Math.max(nw / o.w, nh / o.h);
+        } else if (isHoriz) {
+          s = nw / o.w;
+        } else if (isVert) {
+          s = nh / o.h;
+        } else {
+          s = 1;
+        }
+        nw = Math.max(8, o.w * s);
+        nh = Math.max(8, o.h * s);
+        if (isCorner) {
+          // Pin the opposite corner of the dragged handle.
+          if (h.includes("e")) nx = o.x;
+          else                 nx = o.x + (o.w - nw);
+          if (h.includes("s")) ny = o.y;
+          else                 ny = o.y + (o.h - nh);
+        } else if (isHoriz) {
+          // E or W edge: keep vertical center, pin the opposite vertical
+          // edge horizontally.
+          if (h === "e") nx = o.x;
+          else           nx = o.x + (o.w - nw);
+          ny = o.y + (o.h - nh) / 2;
+        } else if (isVert) {
+          // N or S edge: keep horizontal center, pin opposite horiz edge.
+          if (h === "s") ny = o.y;
+          else           ny = o.y + (o.h - nh);
+          nx = o.x + (o.w - nw) / 2;
+        }
+      }
+      r = { x: nx, y: ny, w: nw, h: nh };
+    }
+    // Clamp to overlay bounds.
+    r.x = Math.max(0, Math.min(W - 4, r.x));
+    r.y = Math.max(0, Math.min(H - 4, r.y));
+    r.w = Math.max(4, Math.min(W - r.x, r.w));
+    r.h = Math.max(4, Math.min(H - r.y, r.h));
+    CUT_SPLIT[action.key] = r;
+    cutSplitRenderRects();
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!action) return;
+    const wasCreate = action.type === "create";
+    const key = action.key;
+    action = null;
+    cutSplitHideCenterGuide();
+    if (wasCreate) {
+      // Advance the draw state machine.
+      if (key === "r1") {
+        CUT_SPLIT.drawState = CUT_SPLIT.r2 ? "r2_done" : "r2";
+        const h = document.getElementById("cutSplitStateHint");
+        if (h) h.textContent = CUT_SPLIT.r2 ? "drag to move / handles to resize"
+                                            : "draw BOTTOM region (drag on video)";
+      } else if (key === "r2") {
+        CUT_SPLIT.drawState = "r2_done";
+        const h = document.getElementById("cutSplitStateHint");
+        if (h) h.textContent = "drag to move / handles to resize";
+      }
+    }
+    cutSplitUpdateGoVisibility();
+  });
+}
+
+// Arrow-key nudge: move the currently-selected region by 1px (or 10px
+// with Shift held) using ←↑→↓. Only active when split mode is on, a
+// region is selected, and focus is not in any text input. Esc clears
+// the selection.
+document.addEventListener("keydown", (e) => {
+  if (CUT_SPLIT.mode !== "split") return;
+  const key = CUT_SPLIT.selected;
+  if (!key || !CUT_SPLIT[key]) return;
+  // Don't steal arrows from inputs / textareas / contenteditable.
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" ||
+             ae.isContentEditable)) return;
+  let dx = 0, dy = 0;
+  if (e.key === "ArrowLeft")  dx = -1;
+  else if (e.key === "ArrowRight") dx = 1;
+  else if (e.key === "ArrowUp")    dy = -1;
+  else if (e.key === "ArrowDown")  dy = 1;
+  else if (e.key === "Escape") {
+    CUT_SPLIT.selected = null; cutSplitRenderRects(); return;
+  } else return;
+  if (e.shiftKey) { dx *= 10; dy *= 10; }
+  const r = CUT_SPLIT[key];
+  const ov = document.getElementById("cutRegionOverlay");
+  const ob = ov ? ov.getBoundingClientRect() : { width: 9999, height: 9999 };
+  r.x = Math.max(0, Math.min(ob.width  - r.w, r.x + dx));
+  r.y = Math.max(0, Math.min(ob.height - r.h, r.y + dy));
+  cutSplitRenderRects();
+  e.preventDefault();
+});
+
+// Resize overlay on window resize so display-px stays meaningful when
+// the page re-flows. We don't rescale rects — the overlay sits on top
+// of the video which keeps its own intrinsic size, and clamping in
+// mousemove handles the new bounds.
+window.addEventListener("resize", () => {
+  // No-op for now; rects are stored in display px which is the same
+  // coordinate system as the overlay. A future enhancement could
+  // re-project rects through the video's source coords on resize.
+});
+
+async function cutGoSplitStack() {
+  if (CUT_SPLIT.mode !== "split") return;
+  if (!CUT.source || !CUT.name) { toast("No source", "load a video first", "warn"); return; }
+  const single = CUT_SPLIT.splitPct >= 100;
+  if (!CUT_SPLIT.r1 || (!single && !CUT_SPLIT.r2)) {
+    toast("Draw region(s)", single ? "one rectangle" : "TOP + BOTTOM", "warn"); return;
+  }
+  if (!(CUT.outS > CUT.inS)) { toast("Bad window", "IN/OUT", "warn"); return; }
+  const r1src = cutSplitRectToSource(CUT_SPLIT.r1);
+  const r2src = (!single && CUT_SPLIT.r2) ? cutSplitRectToSource(CUT_SPLIT.r2) : null;
+  if (!r1src || (!single && !r2src)) { toast("Video not ready", "metadata still loading", "warn"); return; }
+  const btn = document.getElementById("cutSplitGoBtn");
+  btn.disabled = true;
+  try {
+    const body = {
+      source: CUT.source,
+      name: CUT.name,
+      start_t: +CUT.inS.toFixed(3),
+      end_t:   +CUT.outS.toFixed(3),
+      region1: r1src,
+      split_pct: CUT_SPLIT.splitPct,
+      label: CUT.title,
+      ...wmGetCfg("cut"),
+      ...cutSubsGetCfg(),
+    };
+    if (r2src) body.region2 = r2src;
+    const r = await fetch("/api/cut/split-stack/start", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    CUT.activeJobId = j.id;
+    toast("Split-stack render started",
+          `${cutFmtTime(CUT.inS)}→${cutFmtTime(CUT.outS)}, top ${CUT_SPLIT.splitPct}%`, "good");
+    cutPollActive();
+  } catch (e) {
+    toast("Failed", e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ----- Submit cut job -----
 async function cutGo() {
   if (!CUT.source || !CUT.name || !CUT.segments.length) return;
@@ -5050,6 +6309,7 @@ async function cutGo() {
         precise: $("#cutPrecise").checked,
         label: CUT.title,
         ...wmGetCfg("cut"),
+        ...cutSubsGetCfg(),
       }),
     });
     const j = await r.json();
@@ -5634,7 +6894,7 @@ function rightPreviewRefresh() {
 // canvas AND the Render-bar enabled state.
 function rightPreviewBind() {
   const refreshBoth = () => { rightPreviewRefresh(); renderHintRefresh(); };
-  ["dlUrl","igUrl","ttUrl",
+  ["dlUrl","igUrl","ttUrl","twUrl",
    "liveDlUrl","liveDlRangeStart","liveDlRangeEnd"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", refreshBoth);
@@ -5649,8 +6909,10 @@ function rightPreviewBind() {
 // Render-hint — shows which source the big Render button will fire.
 const RENDER_LABELS = {
   download: "YouTube",
+  livedl:   "YouTube Live",
   insta:    "Instagram",
   tiktok:   "TikTok",
+  twitch:   "Twitch VOD",
   upload:   "Local file",
   cut:      "Cut Editor",
   all:      "Read-only",
@@ -5689,6 +6951,12 @@ function renderReadiness() {
       const v = (document.getElementById("ttUrl")?.value || "").trim();
       ready = v.length > 4;
       reason = ready ? "ready" : "paste URL";
+      break;
+    }
+    case "twitch": {
+      const v = (document.getElementById("twUrl")?.value || "").trim();
+      ready = /twitch\.tv\/videos\/\d+/.test(v);
+      reason = !v ? "paste URL" : (ready ? "ready" : "expected twitch.tv/videos/<id>");
       break;
     }
     case "upload": {
@@ -5833,6 +7101,7 @@ function runActiveTab() {
     livedl:   () => typeof liveDlStart === "function" && liveDlStart(),
     insta:    () => typeof igStart === "function" && igStart(),
     tiktok:   () => typeof ttStart === "function" && ttStart(),
+    twitch:   () => typeof twStart === "function" && twStart(),
     upload:   () => typeof upStart === "function" && upStart(),
     cut:      () => typeof cutGo   === "function" && cutGo(),
     all:      () => toast("All Clips — read-only", "Switch to a Source tab to render.", "warn", 3500),

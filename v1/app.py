@@ -18,6 +18,7 @@ import livedl as livedl_mod
 import upload as up_mod
 import insta as ig_mod
 import tiktok as tt_mod
+import twitch as tw_mod
 import cutter as cut_mod
 import subs_burn
 
@@ -97,6 +98,17 @@ class TikTokStartReq(_WatermarkOpts):
     subs_bg: str = "none"
     subs_position: str = "bottom"
 
+class TwitchStartReq(_WatermarkOpts):
+    """Twitch VOD download. Sectioned via start_t/end_t (seconds from
+    VOD start). No subtitles field — Twitch VODs don't ship CC tracks;
+    Whisper fallback is intentionally not wired here."""
+    url: str
+    quality: str = "1080"
+    audio_only: bool = False
+    audio_format: str = "mp3"
+    start_t: Optional[int] = None
+    end_t: Optional[int] = None
+
 class CutSegment(BaseModel):
     start_s: float
     end_s: float
@@ -108,6 +120,15 @@ class CutStartReq(_WatermarkOpts):
     segments: list[CutSegment]
     precise: bool = False
     label: str = ""
+    # Subtitle burn-in. Fresh Whisper over the whole source video, cached
+    # as `<stem>.whisper.<lang>.vtt` sidecar. When on, forces re-encode
+    # (stream-copy branch can't burn subs). Default lang="uk".
+    subs_enabled: bool = False
+    subs_lang: str = "uk"
+    subs_size: str = "medium"
+    subs_color: str = "white"
+    subs_bg: str = "none"
+    subs_position: str = "bottom"
 
 class CutMergeReq(BaseModel):
     filenames: list[str]      # base filenames under cuts root, in concat order
@@ -116,6 +137,33 @@ class CutMergeReq(BaseModel):
 class CutAudioReq(BaseModel):
     filename: str             # base filename under cuts root
     fmt: str = "mp3"          # mp3 | m4a | wav
+
+class _Rect(BaseModel):
+    x: int
+    y: int
+    w: int
+    h: int
+
+class CutSplitStackReq(_WatermarkOpts):
+    """Split-stack 9:16 render request — pulls a single window from the
+    source, crops two source-pixel rectangles, scales each into its half
+    of a 1080x1920 canvas (top H1 = split_pct%, bottom H2 = 100-pct%),
+    vstacks them, writes one mp4 to CUTS_ROOT."""
+    source: str        # "youtube" | "upload" | "insta" | "tiktok" | "cuts"
+    name: str          # filename under that root
+    start_t: float
+    end_t: float
+    region1: _Rect     # top rect in source-pixel coords
+    region2: Optional[_Rect] = None  # bottom rect; omit at split_pct=100
+    split_pct: int = 50  # 10..100; at 100 the top region fills the whole 1080x1920 canvas
+    label: str = ""
+    # Subtitle burn-in (same shape as CutStartReq).
+    subs_enabled: bool = False
+    subs_lang: str = "uk"
+    subs_size: str = "medium"
+    subs_color: str = "white"
+    subs_bg: str = "none"
+    subs_position: str = "bottom"
 
 
 # ---------- Watermark helpers (shared by all 4 ingest tabs) ----------
@@ -266,6 +314,10 @@ def serve_download(filename: str):
     # downloads folder and 404.
     if filename.startswith("cuts/"):
         p = cut_mod.CUTS_ROOT / filename[len("cuts/"):]
+        if not p.exists(): raise HTTPException(404)
+        return FileResponse(p, filename=Path(filename).name)
+    if filename.startswith("twitch/"):
+        p = tw_mod.TWITCH_ROOT / filename[len("twitch/"):]
         if not p.exists(): raise HTTPException(404)
         return FileResponse(p, filename=Path(filename).name)
     # Try live folder first (its mp4s have `_live_` in the stem so no
@@ -477,6 +529,44 @@ def serve_tiktok(filename: str):
     return FileResponse(p, filename=filename)
 
 
+# ---------- Twitch (VOD only — clips + live are out of scope here) ----------
+@app.post("/api/twitch/start")
+def api_twitch_start(req: TwitchStartReq):
+    cfg = req.model_dump(); cfg.pop("url", None)
+    _inject_watermark_path(cfg)
+    try:
+        job = tw_mod.start_download(req.url, cfg)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"failed to start: {e}")
+    _digest_event("clipper", "download_twitch", req.url,
+                  {"id": job.id, "vid": job.vid,
+                   "start_t": req.start_t, "end_t": req.end_t})
+    return {"id": job.id, "vid": job.vid, "status": job.status}
+
+@app.get("/api/twitch/status/{job_id:path}")
+def api_twitch_status(job_id: str):
+    job = tw_mod.get_job(job_id)
+    if not job: raise HTTPException(404, "unknown twitch job")
+    return job.status_dict()
+
+@app.post("/api/twitch/stop/{job_id:path}")
+def api_twitch_stop(job_id: str):
+    job = tw_mod.stop_job(job_id)
+    if not job: raise HTTPException(404, "unknown twitch job")
+    return {"id": job.id, "status": job.status}
+
+@app.get("/api/twitch/list")
+def api_twitch_list():
+    return {"jobs": tw_mod.list_jobs()}
+
+@app.delete("/api/twitch/{job_id:path}")
+def api_twitch_delete(job_id: str):
+    ok = tw_mod.delete_job(job_id)
+    if not ok: raise HTTPException(404, "unknown or already deleted")
+    return {"deleted": job_id}
+
 # ---------- Cutter (multi-segment trim of any source mp4) ----------
 @app.post("/api/cut/start")
 def api_cut_start(req: CutStartReq):
@@ -494,6 +584,14 @@ def api_cut_start(req: CutStartReq):
         "watermark_position": req.watermark_position,
     }
     _inject_watermark_path(wm_cfg)
+    subs_cfg = {
+        "subs_enabled":  req.subs_enabled,
+        "subs_lang":     req.subs_lang,
+        "subs_size":     req.subs_size,
+        "subs_color":    req.subs_color,
+        "subs_bg":       req.subs_bg,
+        "subs_position": req.subs_position,
+    }
     try:
         job = cut_mod.start_cut(
             source_path,
@@ -501,6 +599,7 @@ def api_cut_start(req: CutStartReq):
             precise=req.precise,
             label=req.label,
             wm_cfg=wm_cfg,
+            subs_cfg=subs_cfg,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -509,6 +608,49 @@ def api_cut_start(req: CutStartReq):
     _digest_event("clipper", "cut", req.name or req.source,
                   {"id": job.id, "segments": len(req.segments),
                    "precise": req.precise, "label": req.label})
+    return {"id": job.id, "status": job.status}
+
+@app.post("/api/cut/split-stack/start")
+def api_cut_split_stack_start(req: CutSplitStackReq):
+    """Split-stack: one mp4 in, one 9:16 stacked mp4 out. Status polled
+    via the existing /api/cut/status/{job_id} since we reuse CutJob."""
+    try:
+        source_path = cut_mod.resolve_source(req.source, req.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    wm_cfg = {
+        "watermark_name":     req.watermark_name,
+        "watermark_size":     req.watermark_size,
+        "watermark_opacity":  req.watermark_opacity,
+        "watermark_position": req.watermark_position,
+    }
+    _inject_watermark_path(wm_cfg)
+    subs_cfg = {
+        "subs_enabled":  req.subs_enabled,
+        "subs_lang":     req.subs_lang,
+        "subs_size":     req.subs_size,
+        "subs_color":    req.subs_color,
+        "subs_bg":       req.subs_bg,
+        "subs_position": req.subs_position,
+    }
+    try:
+        job = cut_mod.start_split_stack(
+            source_path,
+            req.start_t, req.end_t,
+            req.region1.model_dump(),
+            req.region2.model_dump() if req.region2 else None,
+            split_pct=req.split_pct,
+            label=req.label,
+            wm_cfg=wm_cfg,
+            subs_cfg=subs_cfg,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"failed to start: {e}")
+    _digest_event("clipper", "cut_split_stack", req.name or req.source,
+                  {"id": job.id, "split_pct": req.split_pct,
+                   "duration": req.end_t - req.start_t, "label": req.label})
     return {"id": job.id, "status": job.status}
 
 @app.get("/api/cut/status/{job_id:path}")
@@ -597,10 +739,13 @@ def _resolve_serve_url_to_disk(url: str):
     prefix, rest = parts
     if prefix == "downloads" and rest.startswith("cuts/"):
         prefix, rest = "cuts", rest[len("cuts/"):]
+    elif prefix == "downloads" and rest.startswith("twitch/"):
+        prefix, rest = "twitch", rest[len("twitch/"):]
     roots = {
         "downloads": dl_mod.DOWNLOADS_ROOT,
         "insta":     ig_mod.INSTA_ROOT,
         "tiktok":    tt_mod.TIKTOK_ROOT,
+        "twitch":    tw_mod.TWITCH_ROOT,
         "uploads":   up_mod.UPLOADS_ROOT,
         "cuts":      cut_mod.CUTS_ROOT,
     }
@@ -684,6 +829,7 @@ def _resolve_idea_path(source: str, name: str) -> Path:
     roots = {
         "insta":   ig_mod.INSTA_ROOT,
         "tiktok":  tt_mod.TIKTOK_ROOT,
+        "twitch":  tw_mod.TWITCH_ROOT,
         "upload":  up_mod.UPLOADS_ROOT,
         "youtube": dl_mod.DOWNLOADS_ROOT,
     }
@@ -751,6 +897,7 @@ def api_idea_prepare(req: IdeaPrepareReq):
 class CaptionScoutReq(BaseModel):
     source: str
     name: str
+    persona: str = "default"  # "default" → CS2-scout; "prokop" → generic-scout
 
 
 class CaptionGenerateReq(BaseModel):
@@ -759,6 +906,8 @@ class CaptionGenerateReq(BaseModel):
     angle: str = ""
     scout_text: str = ""   # cached from prior /api/caption/scout call
                            # so Lalo sees PART B options the user picked from
+    persona: str = "default"  # "default" → Clipper captions project;
+                              # "prokop"  → Prokop captions project (own tone/format)
 
 
 @app.post("/api/caption/scout")
@@ -768,7 +917,7 @@ async def api_caption_scout(req: CaptionScoutReq):
     No captions yet — user picks the angle, then calls /generate."""
     path = _resolve_idea_path(req.source, req.name)
     try:
-        out = await caption_mod.scout_clip(path)
+        out = await caption_mod.scout_clip(path, persona=req.persona)
     except Exception as e:
         raise HTTPException(500, f"scout failed: {type(e).__name__}: {e}")
     return out
@@ -781,7 +930,8 @@ async def api_caption_generate(req: CaptionGenerateReq):
     path = _resolve_idea_path(req.source, req.name)
     try:
         out = await caption_mod.generate_captions(
-            path, angle=req.angle, scout_text=req.scout_text)
+            path, angle=req.angle, scout_text=req.scout_text,
+            persona=req.persona)
     except Exception as e:
         raise HTTPException(500, f"generate failed: {type(e).__name__}: {e}")
     return out

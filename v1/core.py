@@ -104,7 +104,7 @@ def aspect_vf(aspect: str) -> str:
 
 # Whisper model config — defaults match the analyzer side so the cache
 # directory (~/.cache/...) stays shared and we don't re-download models.
-WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "tiny")
+WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "large-v3")
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE",
                                  "float16" if WHISPER_DEVICE == "cuda" else "int8")

@@ -114,18 +114,20 @@ class UploadJob:
     def _run(self):
         try:
             self.started_at = int(time.time())
-            # Step 1: Whisper transcription. Always runs because there
-            # are no pre-existing captions on a user upload.
-            self.status = "transcribing"
-            self.phase_msg = "generating subtitles via Whisper"
-            subs_burn.generate_subs_via_whisper(
-                self.file,
-                on_phase=lambda m: setattr(self, "phase_msg", m))
-
-            # Step 2: Burn subs into video pixels (re-encode). Skip if
-            # user disabled burn — they get a .vtt sidecar instead.
-            # Watermark (if set) is folded into the same pass.
+            # Whisper is on-demand: only runs when the user actually
+            # wants subs burned in (`burn_subs=True`). Upload is often
+            # a "put it here for later" step — running large-v3 for
+            # minutes on every drop is wasteful. If the user later goes
+            # into Cut / IDEA / Prokop, each of those paths runs Whisper
+            # with the correct language.
             if self.cfg.get("burn_subs"):
+                self.status = "transcribing"
+                self.phase_msg = "generating subtitles via Whisper"
+                lang = (self.cfg.get("subs_lang") or "en").lower()
+                subs_burn.generate_subs_via_whisper(
+                    self.file,
+                    on_phase=lambda m: setattr(self, "phase_msg", m),
+                    language=lang)
                 self.status = "burning"
                 self.phase_msg = "вшиваю субтитры в видео — re-encoding"
                 subs_burn.burn_subtitles(

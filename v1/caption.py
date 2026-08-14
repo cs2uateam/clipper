@@ -44,8 +44,10 @@ from claude_agent_sdk import (  # type: ignore
 # Auto-creates a dedicated "Clipper captions" project on first call.
 # ────────────────────────────────────────────────────────────────────
 LALO_BASE = "http://127.0.0.1:8771"
-LALO_PROJECT_NAME = "Clipper captions"
-_LALO_PROJECT_ID_CACHE: Optional[str] = None
+LALO_PROJECT_NAME = "Clipper captions"           # default persona
+LALO_PROJECT_NAME_PROKOP = "Prokop captions"     # 77prokop77-voice persona
+# Cache is keyed by project name so both personas can coexist.
+_LALO_PROJECT_ID_CACHE: dict[str, str] = {}
 
 
 def _lalo_http_json(method: str, path: str, payload: Optional[dict] = None,
@@ -72,39 +74,43 @@ def _lalo_http_json(method: str, path: str, payload: Optional[dict] = None,
         return {"_error": f"{type(e).__name__}: {e}"}
 
 
-async def _ensure_lalo_project() -> str:
-    """Return the project id of "Clipper captions", creating it if needed.
-    Cached after first lookup."""
-    global _LALO_PROJECT_ID_CACHE
-    if _LALO_PROJECT_ID_CACHE:
-        return _LALO_PROJECT_ID_CACHE
+async def _ensure_lalo_project(name: str = LALO_PROJECT_NAME) -> str:
+    """Return the project id of the given Lalo project, creating it if
+    needed. Cached per-name so default + prokop personas coexist without
+    stepping on each other."""
+    cached = _LALO_PROJECT_ID_CACHE.get(name)
+    if cached:
+        return cached
     listing = await asyncio.to_thread(_lalo_http_json, "GET", "/api/projects")
     if "_error" in listing:
         raise RuntimeError(f"Lalo unreachable: {listing['_error']}")
     for p in listing.get("items", []):
-        if p.get("name") == LALO_PROJECT_NAME:
-            _LALO_PROJECT_ID_CACHE = p.get("id") or p.get("pid") or p.get("_id")
-            if _LALO_PROJECT_ID_CACHE:
-                return _LALO_PROJECT_ID_CACHE
+        if p.get("name") == name:
+            pid = p.get("id") or p.get("pid") or p.get("_id")
+            if pid:
+                _LALO_PROJECT_ID_CACHE[name] = pid
+                return pid
     # Not found — create
     created = await asyncio.to_thread(
         _lalo_http_json, "POST", "/api/projects",
-        {"name": LALO_PROJECT_NAME})
+        {"name": name})
     if "_error" in created:
         raise RuntimeError(f"Lalo project create failed: {created['_error']}")
     proj = created.get("project") or {}
     pid = proj.get("id") or proj.get("pid")
     if not pid:
         raise RuntimeError(f"Lalo project create returned no id: {created}")
-    _LALO_PROJECT_ID_CACHE = pid
+    _LALO_PROJECT_ID_CACHE[name] = pid
     return pid
 
 
 async def call_lalo(message: str, *, poll_interval: float = 2.0,
-                    timeout: float = 300.0) -> str:
+                    timeout: float = 300.0,
+                    project_name: str = LALO_PROJECT_NAME) -> str:
     """Send a message to Lalo and wait for the reply text.
-    Returns the assistant's reply_text from the new ui_turn."""
-    pid = await _ensure_lalo_project()
+    Returns the assistant's reply_text from the new ui_turn.
+    `project_name` picks the persona (default vs "Prokop captions")."""
+    pid = await _ensure_lalo_project(project_name)
     # Snapshot current state so we know which ui_turn is new
     pre_state = await asyncio.to_thread(
         _lalo_http_json, "GET", f"/api/state?project={pid}&since=0")
@@ -162,9 +168,17 @@ def _vtt_to_plain(vtt: Path) -> str:
 
 
 def extract_frames_and_transcript(file_path: Path,
-                                  n_frames: int = 0) -> dict:
+                                  n_frames: int = 0,
+                                  language: Optional[str] = None) -> dict:
     """Run the EXTRACT + TRANSCRIBE half of the caption pipeline and
     stop — no LLM call. Returns {transcript, frames, duration_s}.
+
+    `language` pins the Whisper language for the transcript pass.
+      None       → legacy path: reuse ANY .vtt sidecar, fall back to
+                    English-pinned Whisper (historical default for CS2
+                    English streams).
+      "uk"/"en"/… → persona-scoped: prefer a sidecar matching this
+                    language; else run Whisper pinned to `language`.
 
     `n_frames=0` → auto: clamp(12, dur_sec / 2, 30). Floor 12 keeps short
     reels dense (every beat visible); ~1 frame per 2 sec in the middle;
@@ -205,15 +219,32 @@ def extract_frames_and_transcript(file_path: Path,
             frame_paths.append(str(out_p.resolve()))
     if not frame_paths:
         raise RuntimeError("frame extraction yielded nothing")
-    # 2. Transcript — prefer existing .vtt sidecar, fall back to Whisper.
+    # 2. Transcript — prefer .vtt sidecar, fall back to Whisper.
+    # When `language` is set, prefer a sidecar tagged with that language
+    # (`.whisper.<lang>.*.vtt`) so a stale English sidecar from an
+    # earlier IDEA scout doesn't get reused for a Ukrainian Prokop pass.
     transcript = ""
     existing = subs_burn.find_subtitle_files(file_path)
-    if existing:
+    if language:
+        lang = language.lower()
+        matching = [p for p in existing if f".whisper.{lang}." in p.name
+                                          or p.name.endswith(f".{lang}.vtt")]
+        if matching:
+            transcript = _vtt_to_plain(matching[0])
+    elif existing:
         transcript = _vtt_to_plain(existing[0])
     if not transcript.strip():
         try:
-            subs_burn.generate_subs_via_whisper(file_path)
+            if language:
+                subs_burn.generate_subs_via_whisper(
+                    file_path, language=language)
+            else:
+                subs_burn.generate_subs_via_whisper(file_path)
             again = subs_burn.find_subtitle_files(file_path)
+            if language:
+                lang = language.lower()
+                again = [p for p in again if f".whisper.{lang}." in p.name
+                                            or p.name.endswith(f".{lang}.vtt")]
             if again:
                 transcript = _vtt_to_plain(again[0])
         except Exception:
@@ -647,6 +678,34 @@ EVIDENCE-only: то что не видно на кадрах и не упомя�
 Никаких caption'ов в этом сообщении — только scout."""
 
 
+# Generic scout — used by the Prokop persona (77prokop77 does horror
+# gaming reactions, not CS2). Zero game-specific assumptions: no "карта",
+# no "scoreboard", no "CS2". Just describe what's actually in the frames.
+SCOUT_SPEC_GENERIC = """Ты анализируешь короткий видео-клип (≤90 секунд)
+для боса-контент-криейтора. Тебе пришли:
+  • Список абсолютных путей к JPEG-кадрам клипа
+  • Транскрипт речи (если есть)
+  • Имя файла
+
+Открой КАЖДЫЙ кадр через Read и прочитай. Затем напиши ОДНО короткое
+сообщение на русском в формате:
+
+  Что вижу (2-4 предложения, фактически):
+  • Тип контента (вебка стримера / геймплей / реакция / IRL / микс)
+  • Что происходит на экране (главное действие в клипе)
+  • Кто/что в кадре (не расшифровывай, только то что реально видно)
+  • Оверлеи / водяные знаки / текст на экране (литерально)
+
+  Какой акцент? (2-3 варианта, конкретно, на основе фактов выше)
+  Пример: "(а) момент реакции стримера, (б) пунчлайн из транскрипта,
+  (в) визуал происходящего на экране, или скажи своё (тон/длина/юмор)."
+
+EVIDENCE-only: то что не видно на кадрах и не упомянуто в транскрипте —
+НЕ пиши. Не расшифровывай аббревиатуры, не додумывай контекст. НЕ
+сравнивай с CS2/играми/чем-либо — просто описывай что видишь. Никаких
+caption'ов в этом сообщении — только scout."""
+
+
 # ────────────────────────────────────────────────────────────────────
 # Helpers
 # ────────────────────────────────────────────────────────────────────
@@ -796,7 +855,115 @@ def _build_lalo_brief(file_path: Path, scout_text: str, angle: str,
     parts.append("Ничего лишнего в ответ — никаких преамбул про скиллы, "
                  "никаких пояснений «я подумал», никаких метакомментов. "
                  "Сразу `**Figma**` и до RU-строки в конце. Английский в "
-                 "текстах и тегах, русский только на финальной строке.")
+                 "текстах и тегах, русский только на финальной строке.\n\n"
+                 "ОСОБО ВАЖНО: после хэштег-строки YouTube Shorts НЕ "
+                 "добавляй НИЧЕГО лишнего. Никаких персональных подписей "
+                 "типа «Сделано красиво.», «Поехали.», «Готово.», «Let me "
+                 "tell you a story…» и т.п. Никаких пояснений «вот что "
+                 "сделал» / «акценты выбрал такие». Сразу после Shorts-"
+                 "блока — только разрешённая финальная RU-строка "
+                 "`(Готов переделать — скажи как: короче, юморнее, под "
+                 "одну платформу и т.д.)` и точка. Любая другая RU-фраза "
+                 "после Shorts-тегов попадает в карточку YouTube Shorts и "
+                 "ломает её — это баг, не делай так.")
+    return "\n".join(parts)
+
+
+def _build_prokop_brief(file_path: Path, scout_text: str, angle: str,
+                         frames: list[str], transcript: str) -> str:
+    """Prokop persona brief. Same output format as default (4 cards:
+    Figma / Instagram / TikTok / YouTube Shorts) — user asked to keep
+    формат as it was. Key twist: TEXTS FROM FIRST PERSON — 77prokop77
+    is the boss's own account, the videos are HIM. So it's «I screamed»
+    not «the streamer screamed»."""
+    parts: list[str] = []
+    parts.append(f"Босс, нужен текст для клипа с МОЕГО (боссова) канала 77prokop77 — `{file_path.name}`.")
+    parts.append("")
+    parts.append("══ КРИТИЧНО — ГОЛОС ══")
+    parts.append(
+        "ПИШИ ОТ ПЕРВОГО ЛИЦА. Это МОЙ аккаунт, на видео — Я (босс). "
+        "«Я закричал», «мой скример», «я реагировал», «мне было "
+        "стрёмно» — не «streamer reacted», не «77prokop77 shows», "
+        "не «he screamed». Никакого третьего лица. "
+        "Тон: сухая ирония, разговорный, короткие фразы, минимум "
+        "эмодзи (1-2 на пост), никакого маркетинг-жаргона "
+        "(«engaging», «viral», «check this out»). Личный пост от "
+        "создателя, не описание чужого контента."
+    )
+    parts.append("")
+    parts.append("══ ЧТО В КЛИПЕ (scout: факты + варианты угла) ══")
+    parts.append(scout_text.strip() or "(scout вернул пусто)")
+    parts.append("")
+    parts.append("══ КАДРЫ (открой КАЖДЫЙ через Read и проверь сам) ══")
+    for p in frames:
+        parts.append(f"  - {p}")
+    parts.append("")
+    parts.append("══ ТРАНСКРИПТ ══")
+    parts.append(transcript.strip() or "(тишина — разбор по кадрам)")
+    parts.append("")
+    parts.append("══ УГОЛ ПОДАЧИ ОТ БОССА ══")
+    a = (angle or "").strip()
+    resolved = _resolve_letter_pick(scout_text, a)
+    if resolved:
+        parts.append(f"Босс выбрал вариант ({a}) из «Какой акцент?». "
+                     f"Содержание этой опции:")
+        parts.append(resolved)
+    elif _angle_is_garbage(a):
+        parts.append("<auto> — угол не задан или пришёл битый. "
+                     "Выбери по содержанию клипа.")
+    else:
+        parts.append(a)
+    parts.append("")
+    parts.append("══ ЧТО НУЖНО — 4 карточки в РОВНО таком формате ══")
+    parts.append("НАПОМИНАНИЕ: ВСЕ тексты постов — от первого лица УКРАИНСКИМ "
+                 "языком (я / мій / мене / мені). Проверь каждый параграф: "
+                 "если увидел русский, английский или третье лицо («стример», "
+                 "«он», «77prokop77 показує») — переписал не так.")
+    parts.append("""
+**Figma**
+
+<3-5 word title in English, title-case, no quotes/emoji/period — filename для дизайн-файла>
+
+**Instagram**
+
+<hook, до ~60 символов, українською, ВІД ПЕРШОЇ ОСОБИ, 1 эмодзи + `👇`>
+
+<параграф 1, 70-110 слів, українською, ВІД ПЕРШОЇ ОСОБИ, розмовно>
+
+<параграф 2, 70-110 слів, українською, ВІД ПЕРШОЇ ОСОБИ>
+
+<параграф 3, 70-110 слів, українською, ВІД ПЕРШОЇ ОСОБИ>
+
+<5 hashtags по Tag Rulebook v2 (Reels-вариант) — теги на English (algo-cues)>
+
+**TikTok**
+
+<punchy body, 1-3 речення, ≤200 символів, УКРАЇНСЬКОЮ, ВІД ПЕРШОЇ ОСОБИ, з hook-ом на початку, закінчується teaser/питанням>
+
+<5 hashtags по Tag Rulebook v2 (TikTok-вариант) — теги на English>
+
+**YouTube Shorts**
+
+<коротка hype-фраза УКРАЇНСЬКОЮ (ВІД ПЕРШОЇ ОСОБИ) + 5 hashtags по Tag Rulebook v2 (Shorts-вариант) — теги на English, ≤100 символів total>
+
+(Готов переделать — скажи как: короче, юморнее, под одну платформу и т.д.)
+""".strip())
+    parts.append("")
+    parts.append("Ничего лишнего в ответ — никаких преамбул про артефакты, "
+                 "«Материалы», «Результаты», «Профиль канала», "
+                 "«обновил артефакт», никаких сервисных отчётов «что я "
+                 "сделал» / «что дальше на боссе». Сразу `**Figma**` и "
+                 "до RU-строки в конце. Тексты постов — украинский, "
+                 "хэштеги — english (algo-cues), финальная строка — "
+                 "русский.\n\n"
+                 "ОСОБО ВАЖНО: после хэштег-строки YouTube Shorts НЕ "
+                 "добавляй НИЧЕГО лишнего. Никаких персональных подписей "
+                 "типа «Сделано красиво.», «Поехали.», «Готово.», «Tell "
+                 "me again.» и т.п. Никаких пояснений «вот что "
+                 "сделал» / «акценты выбрал такие». Сразу после Shorts-"
+                 "блока — только разрешённая финальная RU-строка "
+                 "`(Готов переделать — скажи как: короче, юморнее, под "
+                 "одну платформу и т.д.)` и точка.")
     return "\n".join(parts)
 
 
@@ -821,18 +988,26 @@ def _build_user_payload(file_path: Path, frames: list[str],
 # ────────────────────────────────────────────────────────────────────
 # Public API
 # ────────────────────────────────────────────────────────────────────
-async def scout_clip(file_path: Path) -> dict:
+async def scout_clip(file_path: Path, persona: str = "default") -> dict:
     """Phase 1 — extract frames + transcript, ask Claude for PART A
     (factual read) + PART B (angle question with 2-3 options).
+    persona:
+      "default" → CS2-specific scout (map/scoreboard/HUD hints),
+                  Whisper defaults to English (CS2 streams are en).
+      "prokop"  → generic content scout + Whisper pinned to Ukrainian
+                  (77prokop77 uk-language content).
     Returns: { duration_s, frame_count, transcript_preview, scout_text }
     """
-    data = extract_frames_and_transcript(file_path)
+    persona_l = (persona or "").lower()
+    tr_lang = "uk" if persona_l == "prokop" else None
+    data = extract_frames_and_transcript(file_path, language=tr_lang)
     frames = data["frames"]
     transcript = data["transcript"]
     payload = _build_user_payload(file_path, frames, transcript)
     payload += "\n\nWrite the factual read + 2-3 angle options ONLY (no captions yet)."
+    spec = SCOUT_SPEC_GENERIC if (persona or "").lower() == "prokop" else SCOUT_SPEC
     scout_text = await _claude_oneshot(
-        system_prompt=SCOUT_SPEC,
+        system_prompt=spec,
         user_msg=payload,
         allowed_tools=["Read"],
     )
@@ -846,48 +1021,63 @@ async def scout_clip(file_path: Path) -> dict:
 
 
 async def generate_captions(file_path: Path, angle: str = "",
-                            scout_text: str = "") -> dict:
-    """Phase 2 — produce 4 cards (Figma title + 3 platforms) via Lalo.
+                            scout_text: str = "",
+                            persona: str = "default") -> dict:
+    """Phase 2 — produce a caption pack via Lalo.
+
+    persona:
+      "default" → «Clipper captions» Lalo project, 4-card Figma/IG/TT/YT
+                  format (strict template built in backend brief).
+      "prokop"  → «Prokop captions» Lalo project, format/tone owned
+                  entirely by that project's KB + system prompt. Backend
+                  just forwards facts.
 
     Pipeline:
       1. If `scout_text` not provided (cached from frontend), run a
          silent local-Claude scout to get the factual read.
-      2. Build a Lalo message: scout context (incl PART B options) +
-         user's angle/letter pick + strict format spec.
-      3. POST to Lalo at :8771, wait for the assistant's reply.
-      4. Save to per-clip history + return.
+      2. Build a persona-specific brief.
+      3. POST to Lalo at :8771 (using the persona's project), wait.
+      4. Save to per-clip history (tagged with persona) + return.
 
-    Returns: { duration_s, frame_count, captions_text, ts }
+    Returns: { duration_s, frame_count, captions_text, ts, persona }
     """
     # Phase 2a — scout (skip if frontend cached it)
-    data = extract_frames_and_transcript(file_path)
+    persona_l = (persona or "").lower()
+    tr_lang = "uk" if persona_l == "prokop" else None
+    data = extract_frames_and_transcript(file_path, language=tr_lang)
     frames = data["frames"]
     transcript = data["transcript"]
     if not (scout_text or "").strip():
         scout_payload = _build_user_payload(file_path, frames, transcript)
         scout_payload += "\n\nWrite the factual read + 2-3 angle options."
+        spec = SCOUT_SPEC_GENERIC if persona_l == "prokop" else SCOUT_SPEC
         scout_text = await _claude_oneshot(
-            system_prompt=SCOUT_SPEC,
+            system_prompt=spec,
             user_msg=scout_payload,
             allowed_tools=["Read"],
         )
 
-    # Phase 2b — Lalo brief
-    lalo_msg = _build_lalo_brief(
-        file_path=file_path,
-        scout_text=scout_text,
-        angle=angle,
-        frames=frames,
-        transcript=transcript,
-    )
-    captions_text = await call_lalo(lalo_msg)
+    # Phase 2b — persona-specific brief + Lalo project routing
+    persona = (persona or "default").lower()
+    if persona == "prokop":
+        lalo_msg = _build_prokop_brief(
+            file_path=file_path, scout_text=scout_text, angle=angle,
+            frames=frames, transcript=transcript)
+        project_name = LALO_PROJECT_NAME_PROKOP
+    else:
+        lalo_msg = _build_lalo_brief(
+            file_path=file_path, scout_text=scout_text, angle=angle,
+            frames=frames, transcript=transcript)
+        project_name = LALO_PROJECT_NAME
+    captions_text = await call_lalo(lalo_msg, project_name=project_name)
 
-    ts = _save_history_entry(file_path, angle, captions_text)
+    ts = _save_history_entry(file_path, angle, captions_text, persona=persona)
     return {
         "duration_s":    data.get("duration_s", 0),
         "frame_count":   len(frames),
         "captions_text": captions_text,
         "ts":            ts,
+        "persona":       persona,
     }
 
 
@@ -904,8 +1094,10 @@ def _history_path(file_path: Path) -> Path:
     return file_path.parent / ".captions" / f"{file_path.stem}.json"
 
 
-def _save_history_entry(file_path: Path, angle: str, text: str) -> float:
-    """Append a fresh entry, return its ts (used as id)."""
+def _save_history_entry(file_path: Path, angle: str, text: str,
+                         persona: str = "default") -> float:
+    """Append a fresh entry, return its ts (used as id). `persona`
+    tags the entry so the history UI can filter default vs prokop."""
     f = _history_path(file_path)
     f.parent.mkdir(parents=True, exist_ok=True)
     items: list[dict] = []
@@ -918,9 +1110,10 @@ def _save_history_entry(file_path: Path, angle: str, text: str) -> float:
             items = []
     ts = time.time()
     items.append({
-        "ts":    ts,
-        "angle": angle or "",
-        "text":  text or "",
+        "ts":      ts,
+        "angle":   angle or "",
+        "text":    text or "",
+        "persona": persona or "default",
     })
     # Cap at 50 most recent so the file never grows unbounded.
     items = items[-50:]

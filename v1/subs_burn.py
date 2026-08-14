@@ -172,24 +172,42 @@ def build_force_style(cfg: dict) -> str:
 def generate_subs_via_whisper(
     video_path: Path,
     on_phase: PhaseCb = None,
+    language: str = "en",
 ) -> Path:
-    """Transcribe the video's audio via Whisper (English-pinned) and
-    write `<stem>.whisper.en.vtt` next to it. Returns that path.
+    """Transcribe the video's audio via Whisper (language-pinned) and
+    write `<stem>.whisper.<lang>.vtt` next to it. Returns that path.
     Used when YouTube has no captions OR for user-uploaded files where
-    no captions exist."""
+    no captions exist. Default English preserves the historical CS2-stream
+    behavior; Cut editor passes language='uk' for Ukrainian voiceover."""
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         raise RuntimeError(
             "faster-whisper не установлен — pip install faster-whisper")
-    if on_phase: on_phase("гоню Whisper")
+    if on_phase: on_phase(f"гоню Whisper ({language}, {core.WHISPER_MODEL_SIZE})")
     model = WhisperModel(
         core.WHISPER_MODEL_SIZE,
         device=core.WHISPER_DEVICE,
         compute_type=core.WHISPER_COMPUTE)
+    # Accuracy-first knobs: beam_size=5 (was 1) + best_of=5 samples multiple
+    # candidates and picks by log-prob — huge quality bump for non-English.
+    # condition_on_previous_text keeps context across cues (better phrasing
+    # + fewer half-words). VAD filter drops silence to reduce hallucinations.
     segments, _info = model.transcribe(
-        str(video_path), vad_filter=True, beam_size=1, language="en")
-    vtt_path = video_path.with_name(video_path.stem + ".whisper.en.vtt")
+        str(video_path),
+        vad_filter=True,
+        beam_size=5,
+        best_of=5,
+        condition_on_previous_text=True,
+        language=language,
+    )
+    # Model slug in filename → switching WHISPER_MODEL env var invalidates
+    # old cached sidecar automatically. Slug is lowercase alnum-hyphen only
+    # so it lands cleanly on Windows/macOS/Linux filesystems.
+    model_slug = re.sub(r"[^a-z0-9]+", "-",
+                        core.WHISPER_MODEL_SIZE.lower()).strip("-")
+    vtt_path = video_path.with_name(
+        f"{video_path.stem}.whisper.{language}.{model_slug}.vtt")
     with open(vtt_path, "w", encoding="utf-8") as f:
         f.write("WEBVTT\n\n")
         for seg in segments:
